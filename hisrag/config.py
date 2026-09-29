@@ -22,12 +22,14 @@ def _deep_merge(base: dict, override: dict) -> dict:
     return out
 
 
-ENV_FILE = REPO_ROOT / ".env"
+def env_file() -> Path:
+    """The secrets file: $HISRAG_ENV_FILE if set, else .env in the repo root."""
+    return Path(os.environ.get("HISRAG_ENV_FILE", REPO_ROOT / ".env"))
 
 
 def load_dotenv(path: Path | None = None) -> None:
     """Minimal .env reader: KEY=VALUE lines, never overrides variables that are already non-empty."""
-    path = path or ENV_FILE
+    path = path or env_file()
     if not path.exists():
         return
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -54,7 +56,7 @@ def set_api_key(name: str = "DHINFRA_API_KEY", *, save: bool = True, path: Path 
     os.environ[name] = key
     if not save:
         return
-    path = path or ENV_FILE
+    path = path or env_file()
     lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
     lines = [line for line in lines if line.split("=", 1)[0].strip() != name] + [f"{name}={key}"]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")

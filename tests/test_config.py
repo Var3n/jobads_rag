@@ -38,3 +38,17 @@ def test_set_api_key_rejects_empty_input(tmp_path, monkeypatch):
     with pytest.raises(ValueError):
         config.set_api_key(path=tmp_path / ".env")
     assert not (tmp_path / ".env").exists()
+
+
+def test_env_file_can_live_outside_the_repo(tmp_path, monkeypatch):
+    secrets = tmp_path / "secrets.env"
+    monkeypatch.setenv("HISRAG_ENV_FILE", str(secrets))
+    monkeypatch.setattr("getpass.getpass", lambda prompt: "sk-outside")
+    monkeypatch.delenv("DHINFRA_API_KEY", raising=False)
+
+    config.set_api_key()
+    monkeypatch.delenv("DHINFRA_API_KEY")
+    config.load_dotenv()
+
+    assert config.env_file() == secrets
+    assert os.environ["DHINFRA_API_KEY"] == "sk-outside"

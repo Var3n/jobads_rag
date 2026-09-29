@@ -27,7 +27,7 @@ from typing import Any, Callable, Iterable, Literal, Sequence, TypeVar
 import numpy as np
 from pydantic import BaseModel, ValidationError
 
-from hisrag.config import ENV_FILE, Config, load_config
+from hisrag.config import Config, env_file, load_config
 
 T = TypeVar("T")
 M = TypeVar("M", bound=BaseModel)
@@ -171,7 +171,7 @@ class DHClient:
 
             key = self.cfg.api_key
             if not key:
-                raise RuntimeError(f"{api['api_key_env']} not found (looked in the environment and {ENV_FILE}). "
+                raise RuntimeError(f"{api['api_key_env']} not found (looked in the environment and {env_file()}). "
                                    "Run hisrag.set_api_key() to enter it.")
             openai_client = OpenAI(base_url=api["base_url"], api_key=key,
                                    timeout=api["timeout_s"], max_retries=api["max_retries"])
