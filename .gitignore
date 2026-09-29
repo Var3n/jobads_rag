@@ -1,0 +1,22 @@
+# Data never goes into the repo (raw CSV, derived Parquet, indexes, caches, logs)
+data/
+*.csv
+*.parquet
+*.lance/
+
+# Secrets and machine-specific config
+.env
+config.local.yaml
+
+# Internal docs saved from the DHinfra portal
+Using the API*
+
+# Python / tooling
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+build/
+dist/

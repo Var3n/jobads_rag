@@ -1,0 +1,44 @@
+# Shared defaults. Machine-specific overrides (e.g. paths on the cluster) go into
+# config.local.yaml next to this file (gitignored), or point HISRAG_CONFIG_LOCAL at one.
+
+paths:
+  data_dir: data                       # relative paths resolve against the repo root
+  raw_csv: data/raw/wrz_extractions.csv
+  cache_db: data/cache/llm_cache.sqlite
+  usage_log: data/logs/usage.jsonl
+
+api:
+  base_url: https://api.dhinfra.uni-graz.at/v1
+  api_key_env: DHINFRA_API_KEY
+  timeout_s: 600
+  max_retries: 8                        # openai client retries 429/5xx and honours Retry-After
+  max_workers: 16                       # thread pool size for parallel jobs
+  requests_per_minute: 120              # client-side limiter, keep at or below the key's limit
+
+llm:
+  model: qwen3.5-397b
+  context_tokens: 256000
+  structured_output: auto               # auto | json_schema | prompt  (auto = decided by 00_api_check)
+
+# Query/passage prefixes follow each model's card. They are what step 8 compares.
+embeddings:
+  default: bge-m3
+  batch_size: 64
+  models:
+    bge-m3:
+      query_prefix: ""
+      passage_prefix: ""
+    qwen3-embedding-8b:
+      query_prefix: "Instruct: Given a search query about historical job advertisements, retrieve relevant advertisements\nQuery: "
+      passage_prefix: ""
+    jina-embeddings-v3:
+      query_model: jina-embeddings-v3-query
+      passage_model: jina-embeddings-v3-passage
+      query_prefix: ""
+      passage_prefix: ""
+    jina-embeddings-v4-text-retrieval:
+      query_prefix: "Query: "
+      passage_prefix: "Passage: "
+    embeddinggemma-300m:
+      query_prefix: "task: search result | query: "
+      passage_prefix: "title: none | text: "

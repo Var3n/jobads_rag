@@ -1,0 +1,12 @@
+# mamba env create -f environment.yml
+# mamba activate hisrag
+# python -m ipykernel install --user --name hisrag --display-name "hisrag"
+name: hisrag
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  - ipykernel
+  - pip:
+      - -e .[dev]
