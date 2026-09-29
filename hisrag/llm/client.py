@@ -171,7 +171,10 @@ class DHClient:
 
             key = self.cfg.api_key
             if not key:
-                raise RuntimeError(f"Set {api['api_key_env']} in the environment or in .env")
+                from hisrag.config import env_file
+
+                raise RuntimeError(f"{api['api_key_env']} is not set. Put it in {env_file()} "
+                                   f"(exists: {env_file().exists()}) or export it before starting Jupyter.")
             openai_client = OpenAI(base_url=api["base_url"], api_key=key,
                                    timeout=api["timeout_s"], max_retries=api["max_retries"])
         self._oa = openai_client
