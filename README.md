@@ -74,6 +74,21 @@ Count distinct ads with `WHERE is_canonical`, printings without it.
 
 `notebooks/01_quality_review.ipynb` shows flagged regions and clusters next to their scanned clippings for checking.
 
+**Step 4: position dictionary (uses the LLM).** Collects every distinct position form (extracted spans plus
+headings; ~6,100 on the Wiener Zeitung sample) and has Qwen normalize each form once, 25 per request with one
+context snippet each. Per form: zero or more entries with `term` (historical title, e.g. Unterlehrerin,
+Commis), `lemma` (gender-neutral base for grouping), `modern` (today's equivalent, Commis → Handlungsgehilfe),
+`gender_form` (m / f / m/f / n) and `category` (16 fixed categories). `hisco_code` is reserved for the HISCO
+matching. Writes `data/derived/position_dict/` (one row per form) and `data/derived/ad_positions/` (one row per
+position mention in an ad, from spans or the linked heading).
+
+```bash
+python -m hisrag.normalize positions --pilot   # ~80 forms with and without reasoning → data/derived/pilot/positions_pilot.csv
+python -m hisrag.normalize positions           # full run (add --thinking if the pilot shows it helps)
+```
+
+Responses are cached, so re-running after an interruption only sends what is missing.
+
 Query the result from Python or a notebook:
 
 ```python
