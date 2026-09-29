@@ -3,8 +3,10 @@
 # Every extracted phrase (columns job_specific, background, language, activity,
 # attitude_towards_work, interpersonal) is mapped to zero or more tags:
 #   dimension: one of the keys below (fixed)
-#   value:     short, modern German; from `values` if the dimension has a closed list,
-#              otherwise free (examples show the intended granularity)
+#   value:     short, modern German spelling; from `values` if the dimension has a closed list,
+#              otherwise free (examples show the intended granularity). Language names keep the
+#              designation used in the source (böhmisch → Böhmisch, not Tschechisch), so changes
+#              in terminology over time stay visible.
 #   detail:    optional qualifier: language level, number of years, amount, "bevorzugt" …
 #
 # Edit freely: descriptions and examples go straight into the LLM prompt. Changing this file
@@ -64,8 +66,8 @@ groups:
       examples: {"Buchhaltung": "Buchhaltung", "weibliche Handarbeiten": "Handarbeiten", "Kleidermachen": "Schneidern", "schöne Handschrift": "Schönschrift", "kocht gut": "Kochen", "Platzkenntnisse": "Ortskenntnis", "Stenographie": "Stenografie"}
     sprachkenntnisse:
       description: Sprachen, die die Person beherrscht oder beherrschen soll; Niveau in `detail`
-      values: [Deutsch, Tschechisch, Französisch, Italienisch, Englisch, Ungarisch, Polnisch, Ruthenisch, Slowenisch, Kroatisch, Serbisch, Rumänisch, Russisch, Spanisch, Latein, Griechisch, Hebräisch, slawische Sprachen, Landessprachen, mehrere Sprachen]
-      examples: {"der deutschen Sprache in Wort und Schrift mächtig": "Deutsch (detail: in Wort und Schrift)", "böhmisch": "Tschechisch", "beider Landessprachen": "Landessprachen"}
+      values: [Deutsch, Böhmisch, Tschechisch, Mährisch, Französisch, Italienisch, Englisch, Ungarisch, Polnisch, Ruthenisch, Slovenisch, Kroatisch, Serbisch, Serbokroatisch, Romanisch, Rumänisch, Russisch, Spanisch, Latein, Griechisch, Hebräisch, slavische Sprachen, Landessprachen, mehrere Sprachen]
+      examples: {"der deutschen Sprache in Wort und Schrift mächtig": "Deutsch (detail: in Wort und Schrift)", "böhmisch": "Böhmisch", "tschechisch": "Tschechisch", "beider Landessprachen": "Landessprachen"}
     zeugnisse_referenzen:
       description: Dienstzeugnisse, Empfehlungen, Referenzen, Leumund
       examples: {"mit guten Zeugnissen": "gute Zeugnisse", "polizeiliches Führungszeugnis": "Führungszeugnis", "beste Empfehlungen": "Empfehlungen"}
@@ -90,8 +92,8 @@ groups:
       examples: {"Freihandzeichnen": "Freihandzeichnen", "Latein und Griechisch als Nebenfach": "Latein; Griechisch (detail: Nebenfach)", "Clavier": "Klavier", "Normalgegenstände": "Volksschulfächer"}
     unterrichtssprache:
       description: Unterrichtssprache der Schule (Merkmal der Stelle, nicht Anforderung an die Person)
-      values: [Deutsch, Tschechisch, Italienisch, Polnisch, Ruthenisch, Slowenisch, Kroatisch, Serbisch, Rumänisch, Ungarisch]
-      examples: {"mit böhmischer Unterrichtssprache": "Tschechisch", "deutscher Unterrichtssprache": "Deutsch"}
+      values: [Deutsch, Böhmisch, Tschechisch, Italienisch, Polnisch, Ruthenisch, Slovenisch, Kroatisch, Serbisch, Serbokroatisch, Rumänisch, Ungarisch]
+      examples: {"mit böhmischer Unterrichtssprache": "Böhmisch", "deutscher Unterrichtssprache": "Deutsch"}
     arbeitszeit_umfang:
       description: Umfang und Dauer der Beschäftigung
       examples: {"Nebenbeschäftigung": "Nebenbeschäftigung", "einige freie Stunden": "stundenweise", "für den Sommer": "saisonal", "dauernd": "dauerhaft", "Aushilfe": "Aushilfe"}

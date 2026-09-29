@@ -48,7 +48,8 @@ def spans_frame():
 def test_vocabulary_loads_and_versions_by_content(tmp_path):
     v = R.Vocabulary()
     assert "sprachkenntnisse" in v.dimensions and v.group_of["arbeitshaltung"] == "Eigenschaften"
-    assert "tschechisch" in v.closed_values("sprachkenntnisse") and v.closed_values("fachkenntnisse") is None
+    assert {"böhmisch", "tschechisch"} <= v.closed_values("sprachkenntnisse")
+    assert v.closed_values("fachkenntnisse") is None
     changed = tmp_path / "v.yaml"
     changed.write_text(R.VOCAB_PATH.read_text(encoding="utf-8") + "\n# edit\n", encoding="utf-8")
     assert R.Vocabulary(changed).version != v.version

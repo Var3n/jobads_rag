@@ -85,7 +85,7 @@ Regeln:
 - Leere Liste für Bruchstücke ohne erkennbaren Inhalt ("welches fähig ist", "ord", "ge", "kundig" allein).
 - Beurteile den Ausdruck selbst; der Kontext dient nur zum Verständnis (z. B. ob "deutscher" zu "Unterrichtssprache" gehört).
 - Die angegebene Spalte ist die automatische Einordnung und kann falsch sein; entscheide nach dem Inhalt.
-- Bei Dimensionen mit festen Werten verwendest du genau einen dieser Werte. Historische Schreibung wird modernisiert (Correspondenz → Korrespondenz, böhmisch → Tschechisch).
+- Bei Dimensionen mit festen Werten verwendest du genau einen dieser Werte. Die Schreibung wird modernisiert (Correspondenz → Korrespondenz), Sprachbezeichnungen bleiben aber wie in der Quelle (böhmisch → Böhmisch, ruthenisch → Ruthenisch, tschechisch → Tschechisch).
 - Erfinde nichts: verstümmelte Wörter, die du nicht sicher erkennst, lässt du weg.
 
 Dimensionen:{vocab.prompt_section()}
