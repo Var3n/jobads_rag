@@ -31,6 +31,24 @@ Updating after new commits: `git pull`. If git says a notebook would be overwrit
 `nbstripout --install`), discard its outputs with `git checkout -- notebooks/<name>.ipynb` first.
 After a pull, restart the kernel; the package is installed in editable mode, so nothing needs reinstalling.
 
+## Pipeline
+
+**Step 1: import.** Reads the extraction CSV and writes one row per region to `data/ads/newspaper=…/year=…/`
+(Parquet). It parses all span columns, attaches gender to each position, drops exact duplicate regions, and
+links each heading to the ad directly below it (`heading_text`, often the job title). It prints a report.
+
+```bash
+python -m hisrag.ingest                      # uses paths.raw_csv
+python -m hisrag.ingest other_paper.csv      # one CSV per newspaper; re-running replaces its partitions
+```
+
+Query the result from Python or a notebook:
+
+```python
+from hisrag.data import query
+query("SELECT decade, label, count(*) AS n FROM ads GROUP BY ALL ORDER BY ALL")
+```
+
 ## Layout
 
 | Path | Contents |
@@ -42,6 +60,7 @@ After a pull, restart the kernel; the package is installed in editable mode, so 
 | `hisrag/agent/` | Steps 10–12: tools, agent loop, playground |
 | `hisrag/graph/` | Step 14: concept graph |
 | `hisrag/eval/` | Synthetic retrieval checks, citation checker, interaction log |
+| `hisrag/data.py` | DuckDB view `ads` over the Parquet dataset |
 | `notebooks/` | Notebooks to run on the cluster; they only call package code |
 
 ## Tests

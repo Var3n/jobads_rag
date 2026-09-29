@@ -78,6 +78,7 @@ def test_chat_json_auto_falls_back_to_prompt_on_400(cfg):
             raise BadRequest("json_schema not supported")
         return '{"surface": "a", "lemma": "a", "is_position": false}'
 
+    cfg["llm"]["structured_output"] = "auto"
     client = DHClient(cfg, openai_client=FakeOpenAI(handler))
     client.chat_json([{"role": "user", "content": "x"}], Position)
     assert client.structured_mode == "prompt"
@@ -124,3 +125,8 @@ def test_map_can_collect_exceptions(cfg):
 
     out = client.map(fn, [1, 2, 3], return_exceptions=True)
     assert out[0] == 10 and isinstance(out[1], ValueError) and out[2] == 30
+
+
+def test_leading_blank_lines_from_reasoning_mode_are_stripped(cfg):
+    client = DHClient(cfg, openai_client=FakeOpenAI(lambda p: "\n\nJa, das ist eine Berufsbezeichnung."))
+    assert client.chat([{"role": "user", "content": "?"}], thinking=True).content.startswith("Ja")

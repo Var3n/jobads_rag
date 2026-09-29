@@ -4,6 +4,7 @@
 paths:
   data_dir: data                       # relative paths resolve against the repo root
   raw_csv: data/raw/wrz_extractions.csv
+  ads_dir: data/ads                      # Parquet, partitioned newspaper=…/year=…
   cache_db: data/cache/llm_cache.sqlite
   usage_log: data/logs/usage.jsonl
 
@@ -19,7 +20,7 @@ api:
 llm:
   model: qwen3.5-397b
   context_tokens: 256000
-  structured_output: auto               # auto | json_schema | prompt  (auto = decided by 00_api_check)
+  structured_output: json_schema        # json_schema | prompt | auto  (00_api_check: json_schema works)
 
 # Query/passage prefixes follow each model's card. They are what step 8 compares.
 embeddings:

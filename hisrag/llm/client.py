@@ -241,8 +241,11 @@ class DHClient:
              "function": {"name": tc["function"]["name"], "arguments": tc["function"]["arguments"]}}
             for tc in (msg.get("tool_calls") or [])
         ]
+        content = msg.get("content")
+        if isinstance(content, str):
+            content = content.strip()  # with reasoning on, answers start with blank lines
         return ChatResult(
-            content=msg.get("content"),
+            content=content,
             reasoning=msg.get("reasoning") or msg.get("reasoning_content"),
             tool_calls=tool_calls,
             finish_reason=choice.get("finish_reason"),
