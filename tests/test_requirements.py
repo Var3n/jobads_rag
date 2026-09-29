@@ -115,3 +115,29 @@ def test_frequent_phrases_get_contexts_from_different_ads_and_years():
     assert R.CONTEXT_SEPARATOR not in p.loc["language|italienisch", "context"]
     msgs = R.RequirementMapper().messages(p.reset_index())
     assert "Kontexte:" in msgs[1]["content"] and '"italienisch" — Kontext:' in msgs[1]["content"]
+
+
+@pytest.mark.parametrize("detail, phrase, kept", [
+    ("in Wort und Schrift", "Kenntnis der deutschen Sprache", False),   # from the context, not the phrase
+    ("Unterstufe", "böhmischer Unter", False),                          # misread truncation
+    ("Hauptfach", "Deutsch und Französisch", False),
+    ("vollkommen", "vollkommene Kenntniß der italienischen Sprache", True),
+    ("200 fl. C. M.", "eine Caution von 200 fl. C. M. in Hypothek", True),
+    ("Korrespondenz", "deutsche Correspondenz", True),                 # modernized spelling
+    ("Alter 4 bis 6 Jahre", "Kinder im Alter von 4 bis 6 Jahren", True),
+])
+def test_detail_grounding(detail, phrase, kept):
+    assert R.detail_is_grounded(detail, phrase) is kept
+
+
+def test_ungrounded_details_are_dropped_from_dictionary(cfg):
+    def handler(payload):
+        return json.dumps({"items": [{"i": 1, "tags": [
+            {"dimension": "sprachkenntnisse", "value": "Deutsch", "detail": "in Wort und Schrift"}]}]})
+    phrases = pd.DataFrame({"key": ["language|kenntnis der deutschen sprache"], "column": ["language"],
+                            "phrase_key": ["kenntnis der deutschen sprache"], "count": [53],
+                            "surface": ["Kenntnis der deutschen Sprache"], "context": ["…"]})
+    mapper = R.RequirementMapper()
+    results, _ = mapper.run(DHClient(cfg, openai_client=FakeOpenAI(handler)), phrases, progress=False)
+    d = mapper.to_dictionary(phrases, results, "qwen")
+    assert d["tags"][0][0]["detail"] is None and mapper.details_dropped == 1

@@ -19,6 +19,7 @@ import pandas as pd
 import pyarrow as pa
 import yaml
 from pydantic import BaseModel, Field, create_model
+from rapidfuzz import fuzz
 
 from hisrag.config import REPO_ROOT
 from hisrag.llm.client import DHClient
@@ -85,7 +86,8 @@ Regeln:
 - Stehen mehrere Kontexte (getrennt durch ‖) dabei, kommt der Ausdruck in verschiedenen Anzeigen vor: wähle die Deutung, die allgemein zutrifft, nicht die eines einzelnen Kontexts.
 - Ein Tag pro Information; Aufzählungen ergeben mehrere Tags ("Buchhaltung, Correspondenz und Stenographie" → drei Tags fachkenntnisse).
 - Leere Liste für Bruchstücke ohne erkennbaren Inhalt ("welches fähig ist", "ord", "ge", "kundig" allein).
-- Bevorzugte Werte nur verwenden, wenn sie die Bedeutung treffen; sonst das eigene Wort des Ausdrucks (modernisiert), z. B. "sympathisch".
+- Werte aus den Beispielen und bevorzugte Werte haben Vorrang, wenn sie die Bedeutung treffen ("gehörig instruierten" → vorschriftsmäßiges Gesuch); sonst das eigene Wort des Ausdrucks, z. B. "sympathisch".
+- Werte immer in moderner Schreibung (documentirt → dokumentiert, Correspondenz → Korrespondenz); nur Sprachbezeichnungen bleiben historisch (siehe unten).
 - Die angegebene Spalte ist die automatische Einordnung und kann falsch sein; entscheide nach dem Inhalt.
 - Bei Dimensionen mit festen Werten verwendest du genau einen dieser Werte. Die Schreibung wird modernisiert (Correspondenz → Korrespondenz), Sprachbezeichnungen bleiben aber wie in der Quelle (böhmisch → Böhmisch, ruthenisch → Ruthenisch, tschechisch → Tschechisch).
 - Erfinde nichts: verstümmelte Wörter, die du nicht sicher erkennst, lässt du weg.
@@ -135,6 +137,18 @@ def collect_phrases(spans: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows).sort_values(["column", "phrase_key"]).reset_index(drop=True)
 
 
+_DETAIL_WORD = re.compile(r"[^\W\d_]{4,}|\d{2,}")
+
+
+def detail_is_grounded(detail: str, phrase: str) -> bool:
+    """A detail must restate the phrase, not the context: every content word of the detail
+    (letters ≥ 4, or a number) has to occur in the phrase, allowing spelling variants
+    (Correspondenz / Korrespondenz, vollkommen / vollkommene)."""
+    words = _DETAIL_WORD.findall(normalize_text(detail).lower())
+    text = phrase_key(phrase)
+    return all(w in text or fuzz.partial_ratio(w, text) >= 80 for w in words)
+
+
 class RequirementMapper:
     def __init__(self, vocab: Vocabulary | None = None):
         self.vocab = vocab or Vocabulary()
@@ -156,7 +170,8 @@ class RequirementMapper:
     def to_dictionary(self, phrases: pd.DataFrame, results: dict, model: str) -> pd.DataFrame:
         d = phrases.copy()
         tags = []
-        for key in d["key"]:
+        self.details_dropped = 0
+        for key, surface in zip(d["key"], d["surface"]):
             if key not in results:
                 tags.append(None)
                 continue
@@ -164,9 +179,12 @@ class RequirementMapper:
             for t in results[key].tags:
                 closed = self.vocab.closed_values(t.dimension)
                 value = t.value.strip()
+                detail = (t.detail or "").strip() or None
+                if detail and not detail_is_grounded(detail, surface):
+                    detail = None
+                    self.details_dropped += 1
                 out.append({"dimension": t.dimension, "group": self.vocab.group_of[t.dimension], "value": value,
-                            "detail": t.detail or None,
-                            "in_vocab": closed is None or value.lower() in closed})
+                            "detail": detail, "in_vocab": closed is None or value.lower() in closed})
             tags.append(out)
         d["tags"] = tags
         d["is_informative"] = d["tags"].map(lambda t: bool(t) if t is not None else None)
@@ -230,6 +248,10 @@ def pilot_sample(phrases: pd.DataFrame, per_column: int = 20, seed: int = 0) -> 
 
 def format_tags(item) -> str:
     return "; ".join(f"{t.dimension}={t.value}" + (f" ({t.detail})" if t.detail else "") for t in item.tags) or "—"
+
+
+def format_tag_dicts(tags: list[dict]) -> str:
+    return "; ".join(f"{t['dimension']}={t['value']}" + (f" ({t['detail']})" if t["detail"] else "") for t in tags) or "—"
 
 
 def dumps(obj) -> str:

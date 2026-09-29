@@ -12,7 +12,7 @@
 # Edit freely: descriptions and examples go straight into the LLM prompt. Changing this file
 # changes the prompt version, so the next run re-maps all phrases.
 
-version: 2
+version: 3
 
 groups:
   Person:
@@ -56,8 +56,8 @@ groups:
 
   Qualifikation:
     formale_qualifikation:
-      description: Prüfungen, Befähigungsnachweise, Diplome, Lehrbefähigung, Staatsprüfungen
-      examples: {"geprüfte": "geprüft", "ungeprüfte": "ungeprüft", "Lehrbefähigungszeugnis": "Lehrbefähigung", "3 theoretische Staatsprüfungen": "Staatsprüfungen", "diplomirte": "Diplom"}
+      description: Prüfungen, Befähigungsnachweise, Diplome, Lehrbefähigung, Staatsprüfungen; auch wenn nur das Zeugnis darüber verlangt wird
+      examples: {"geprüfte": "geprüft", "ungeprüfte": "ungeprüft", "mit dem Lehrbefähigungszeugnisse": "Lehrbefähigung", "3 theoretische Staatsprüfungen": "Staatsprüfungen", "diplomirte": "Diplom"}
     berufserfahrung:
       description: Praxis, Dienstjahre, frühere Stellungen, Qualifikationsniveau
       examples: {"mit vieljähriger Praxis": "langjährige Praxis", "durch 14 Jahre ... als Disponent": "Disponent", "Erste Kraft": "erste Kraft", "mehrere Jahre bei hohen Herrschaften gedient": "Herrschaftsdienst"}
@@ -106,8 +106,8 @@ groups:
 
   Bewerbung:
     bewerbungsformalitaeten:
-      description: Form der Bewerbung und beizulegende Unterlagen, die keine Qualifikation sind
-      examples: {"gehörig instruierten (Gesuche)": "vorschriftsmäßiges Gesuch", "eigenhändig geschriebenen": "eigenhändig geschrieben", "mit dem Tauf- und Heimatscheine": "Tauf- und Heimatschein", "Proben ihrer Leistungen": "Arbeitsproben", "ungestempelte Diensttabelle": "Diensttabelle"}
+      description: Form der Bewerbung und beizulegende Unterlagen, die keine Qualifikation belegen (Zeugnisse über Prüfungen oder Befähigung → formale_qualifikation)
+      examples: {"gehörig instruierten (Gesuche)": "vorschriftsmäßiges Gesuch", "vorschriftsmäßig belegten": "belegtes Gesuch", "gehörig documentirten": "belegtes Gesuch", "eigenhändig geschriebenen": "eigenhändig geschrieben", "mit dem Tauf- und Heimatscheine": "Tauf- und Heimatschein", "Proben ihrer Leistungen": "Arbeitsproben", "ungestempelte Diensttabelle": "Diensttabelle"}
 
   Sonstiges:
     sonstiges:

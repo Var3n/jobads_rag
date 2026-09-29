@@ -191,6 +191,8 @@ def run_requirements(cfg, pilot=False, batch_size=40, workers=None) -> dict:
         results, stats = mapper.run(client, sample, batch_size=batch_size)
         review = sample[["column", "surface", "count", "context"]].copy()
         review["tags"] = [R.format_tags(results[k]) if k in results else "FAILED" for k in sample["key"]]
+        kept = mapper.to_dictionary(sample, results, client.model)
+        review["tags_after_checks"] = [R.format_tag_dicts(t) if t is not None else "FAILED" for t in kept["tags"]]
         out = derived_dir("pilot", cfg)
         out.mkdir(parents=True, exist_ok=True)
         review.to_csv(out / "requirements_pilot.csv", index=False, encoding="utf-8-sig")
@@ -206,7 +208,8 @@ def run_requirements(cfg, pilot=False, batch_size=40, workers=None) -> dict:
                    d_out / "part-0.parquet")
     ad_req = R.ad_requirements(spans, dictionary)
     write_partitioned(ad_req, derived_dir("ad_requirements", cfg), R.AD_REQUIREMENTS_SCHEMA)
-    return {**base, **stats, **R.summarize(dictionary, ad_req), "usage": client.usage.summary()}
+    return {**base, **stats, **R.summarize(dictionary, ad_req),
+            "details_dropped_as_ungrounded": mapper.details_dropped, "usage": client.usage.summary()}
 
 
 STEPS = {"text": run_text, "dedup": run_dedup, "positions": run_positions, "requirements": run_requirements}
