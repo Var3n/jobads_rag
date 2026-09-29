@@ -30,7 +30,7 @@ import pandas as pd
 import pyarrow as pa
 from pydantic import BaseModel, Field
 
-from hisrag.llm.client import DHClient
+from hisrag.llm.client import DHClient, StructuredOutputError
 from hisrag.normalize.text import normalize_text
 
 PROMPT_VERSION = "positions-v2"
@@ -167,10 +167,22 @@ THINKING_REQUEST = {"timeout_s": 1800, "max_retries": 0}
 
 
 def normalize_batch(client: DHClient, batch: pd.DataFrame, *, thinking: bool = False) -> dict[str, FormResult]:
-    """Normalize one batch; items the model skipped are retried one by one."""
+    """Normalize one batch; items the model skipped are retried one by one.
+
+    If the answer cannot be parsed even after the repair attempt (e.g. it broke off mid-JSON),
+    the batch is split in half and each half is sent again: the prompts differ, so the failure
+    is not simply repeated (temperature 0 and the response cache would return the same answer).
+    """
     opts = THINKING_REQUEST if thinking else {}
-    result = client.chat_json(_messages(batch), BatchResult, thinking=thinking,
-                              max_tokens=16000 if thinking else 6000, **opts)
+    try:
+        result = client.chat_json(_messages(batch), BatchResult, thinking=thinking,
+                                  max_tokens=16000 if thinking else 6000, **opts)
+    except StructuredOutputError:
+        if len(batch) == 1:
+            return {batch["key"].iloc[0]: FormResult(i=1, entries=[], confidence="low")}
+        half = len(batch) // 2
+        return {**normalize_batch(client, batch.iloc[:half], thinking=thinking),
+                **normalize_batch(client, batch.iloc[half:], thinking=thinking)}
     by_i = {item.i: item for item in result.items if 1 <= item.i <= len(batch)}
     out = {}
     for n, key in enumerate(batch["key"], 1):
@@ -222,8 +234,13 @@ def to_dictionary(forms: pd.DataFrame, results: dict[str, FormResult], model: st
     return d[DICT_SCHEMA.names]
 
 
+# A lemma's categories are only unified when one category clearly dominates. Generic titles
+# (Adjunct, Aufseher, Assistent) genuinely occur in several fields and keep per-form categories.
+HARMONIZE_MIN_SHARE = 0.75
+
+
 def harmonize_categories(dictionary: pd.DataFrame) -> tuple[pd.DataFrame, int]:
-    """Give every entry of a lemma the category most of its forms received (weighted by count).
+    """Unify a lemma's category when one category has ≥ HARMONIZE_MIN_SHARE of its mentions.
 
     Each form is judged from one context snippet, so the same occupation can land in different
     categories (Köchin: Haushalt vs. Gastgewerbe). Returns the dictionary and the number of
@@ -233,7 +250,11 @@ def harmonize_categories(dictionary: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     for entries, count in zip(dictionary["entries"], dictionary["count"]):
         for e in entries or []:
             votes.setdefault(e["lemma"].lower(), Counter())[e["category"]] += int(count)
-    majority = {lemma: c.most_common(1)[0][0] for lemma, c in votes.items()}
+    dominant = {}
+    for lemma, c in votes.items():
+        category, n = c.most_common(1)[0]
+        if n / sum(c.values()) >= HARMONIZE_MIN_SHARE:
+            dominant[lemma] = category
     changed = 0
     new_entries = []
     for entries in dictionary["entries"]:
@@ -242,7 +263,7 @@ def harmonize_categories(dictionary: pd.DataFrame) -> tuple[pd.DataFrame, int]:
             continue
         fixed = []
         for e in entries:
-            cat = majority[e["lemma"].lower()]
+            cat = dominant.get(e["lemma"].lower(), e["category"])
             changed += cat != e["category"]
             fixed.append({**e, "category": cat})
         new_entries.append(fixed)

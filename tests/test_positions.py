@@ -112,3 +112,29 @@ def test_harmonize_categories_uses_count_weighted_majority():
     assert changed == 1
     assert fixed["entries"][1][0]["category"] == "Haushalt/Dienstboten"
     assert fixed["entries"][2][0]["category"] == "Erziehung/Unterricht"
+
+
+def test_harmonize_keeps_categories_of_generic_titles():
+    d = pd.DataFrame({"count": [93, 54, 18], "entries": [
+        [entry("Adjunct", "Adjunct", category="Justiz/Recht")],
+        [entry("Adjunct", "Adjunct", category="Öffentliche Verwaltung")],
+        [entry("Adjunct", "Adjunct", category="Industrie/Technik")],
+    ]})
+    fixed, changed = P.harmonize_categories(d)
+    assert changed == 0
+    assert [e[0]["category"] for e in fixed["entries"]] == ["Justiz/Recht", "Öffentliche Verwaltung", "Industrie/Technik"]
+
+
+def test_unparseable_batch_is_split_until_it_works(cfg):
+    def handler(payload):
+        user = payload["messages"][-1]["content"]
+        found = re.findall(r'^(\d+)\. "(.*?)" — Kontext', user, re.M)
+        if len(found) > 2:
+            return '{"items": [{"i": 1, "entries": ['   # breaks off mid-JSON
+        return json.dumps({"items": [{"i": int(i), "entries": ANSWERS[s], "confidence": "high"} for i, s in found]})
+
+    fake = FakeOpenAI(handler)
+    forms = forms_frame(["Unterlehrer", "eine", "Lehrerin", "Schulleiters- und Lehrerstellen"])
+    results, stats = P.run(DHClient(cfg, openai_client=fake), forms, batch_size=4, progress=False)
+    assert stats["failed_batches"] == [] and len(results) == 4
+    assert results["lehrerin"].entries[0].lemma == "Lehrer"

@@ -89,8 +89,11 @@ python -m hisrag.normalize positions           # full run, ~45 min at 16 paralle
 
 Reasoning (`--thinking`) was tested in the pilot and is off by default: ~1,450 output tokens per form (≈11 h for
 the full run instead of ~45 min) for answers that differed mainly in category choices, not clearly for the
-better. Because each form is judged from one context, every lemma afterwards gets the category most of its
-forms received (weighted by frequency).
+better. Because each form is judged from one context, a lemma's categories are unified afterwards when one
+category has at least 75 % of its mentions (Amtsdiener, Assistent); generic titles that genuinely occur in several
+fields (Adjunct, Aufseher) keep per-form categories. A batch whose answer cannot be parsed is split in half and
+retried. `notebooks/02_positions_review.ipynb` shows low-confidence forms, the forms behind a lemma, and first
+counts per decade.
 
 Responses are cached, so re-running after an interruption only sends what is missing.
 
