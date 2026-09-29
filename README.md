@@ -12,6 +12,7 @@ cd jobads_rag
 mamba env create -f environment.yml
 mamba activate hisrag
 python -m ipykernel install --user --name hisrag --display-name "hisrag"
+nbstripout --install        # git ignores notebook outputs, so running a notebook never blocks `git pull`
 ```
 
 API key: the first notebook cell asks for it if it is missing and stores it in `.env` (owner-only
@@ -26,7 +27,9 @@ paths:
   raw_csv: /path/on/cluster/wrz_extractions.csv
 ```
 
-Updating after new commits: `git pull` (the package is installed in editable mode, so restart the kernel and you're done).
+Updating after new commits: `git pull`. If git says a notebook would be overwritten (a clone without
+`nbstripout --install`), discard its outputs with `git checkout -- notebooks/<name>.ipynb` first.
+After a pull, restart the kernel; the package is installed in editable mode, so nothing needs reinstalling.
 
 ## Layout
 
