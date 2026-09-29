@@ -163,18 +163,20 @@ def _extract_json(text: str) -> str:
 
 
 class DHClient:
-    def __init__(self, cfg: Config | None = None, *, openai_client: Any = None, use_cache: bool = True):
+    def __init__(self, cfg: Config | None = None, *, openai_client: Any = None, use_cache: bool = True,
+                 timeout_s: float | None = None, max_retries: int | None = None):
         self.cfg = cfg or load_config()
         api = self.cfg["api"]
         if openai_client is None:
-            from openai import OpenAI
+            from openai import OpenAI, Timeout
 
             key = self.cfg.api_key
             if not key:
                 raise RuntimeError(f"{api['api_key_env']} not found (looked in the environment and {env_file()}). "
                                    "Run hisrag.set_api_key() to enter it.")
-            openai_client = OpenAI(base_url=api["base_url"], api_key=key,
-                                   timeout=api["timeout_s"], max_retries=api["max_retries"])
+            timeout = Timeout(timeout_s or api["timeout_s"], connect=api.get("connect_timeout_s", 15))
+            openai_client = OpenAI(base_url=api["base_url"], api_key=key, timeout=timeout,
+                                   max_retries=api["max_retries"] if max_retries is None else max_retries)
         self._oa = openai_client
         self.model = self.cfg["llm"]["model"]
         self.max_workers = api["max_workers"]
@@ -366,6 +368,19 @@ class DHClient:
 
                 results = tqdm(results, total=len(items), desc=desc)
             return list(results)
+
+
+def show_retries() -> None:
+    """Print a line whenever the openai client retries (429, 503, timeouts), instead of waiting silently."""
+    import logging
+
+    logger = logging.getLogger("openai")
+    if not any(getattr(h, "_hisrag", False) for h in logger.handlers):
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(asctime)s openai: %(message)s", "%H:%M:%S"))
+        handler._hisrag = True
+        logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
 
 
 def _with_system_suffix(messages: list[dict], text: str) -> list[dict]:

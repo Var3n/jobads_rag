@@ -10,7 +10,8 @@ paths:
 api:
   base_url: https://api.dhinfra.uni-graz.at/v1
   api_key_env: DHINFRA_API_KEY
-  timeout_s: 600
+  timeout_s: 600                        # per request; long answers with reasoning can take minutes
+  connect_timeout_s: 15                 # fail fast when the API is unreachable
   max_retries: 8                        # openai client retries 429/5xx and honours Retry-After
   max_workers: 16                       # thread pool size for parallel jobs
   requests_per_minute: 120              # client-side limiter, keep at or below the key's limit
