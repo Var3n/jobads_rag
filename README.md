@@ -1,5 +1,7 @@
 # hisrag: RAG over historical job advertisements
 
+Current state, decisions and next steps: [docs/STATUS.md](docs/STATUS.md).
+
 Proof of concept for question answering over historical newspaper job ads (Wiener Zeitung subset, 1850–1950),
 using the extracted metadata (positions, requirements, gender, salary …) alongside the text.
 LLM and embeddings run on the DHinfra cluster API (`qwen3.5-397b` plus several embedding models).
