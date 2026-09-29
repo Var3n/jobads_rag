@@ -58,7 +58,21 @@ a language guess (`de`/`it`/`fr`), raw quality metrics, and these flags:
 python -m hisrag.normalize text
 ```
 
-`notebooks/01_quality_review.ipynb` shows flagged regions next to their scanned clipping for checking.
+**Step 3: repeated printings.** Ads ran for several days or weeks (official notices usually three times).
+Writes `data/derived/ad_dups/`: `dup_cluster_id` (the canonical region of each ad), `dup_cluster_size`,
+`is_canonical`, and the run's first/last date. Candidates come from MinHash on character 5-grams (same
+newspaper, within 60 days); each pair is then checked word by word, because template notices for different
+places can be 95 % identical. Headings, death register entries, too-short and `pc_unsupported` regions stay
+single. On the Wiener Zeitung sample: 52,823 regions → 44,291 distinct ads; the longest run is 64 printings
+over two years.
+
+```bash
+python -m hisrag.normalize dedup
+```
+
+Count distinct ads with `WHERE is_canonical`, printings without it.
+
+`notebooks/01_quality_review.ipynb` shows flagged regions and clusters next to their scanned clippings for checking.
 
 Query the result from Python or a notebook:
 

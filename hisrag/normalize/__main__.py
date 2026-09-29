@@ -1,4 +1,8 @@
-"""python -m hisrag.normalize text   (step 2: normalized text, quality metrics and flags → derived/ad_text)"""
+"""python -m hisrag.normalize STEP
+
+  text    step 2: normalized text, quality metrics and flags → derived/ad_text
+  dedup   step 3: clusters of repeated printings → derived/ad_dups (needs `text`)
+"""
 
 import argparse
 import json
@@ -17,7 +21,21 @@ def run_text(cfg) -> dict:
     return {**summarize(q, ads["label"]), "written_to": str(out)}
 
 
-STEPS = {"text": run_text}
+def run_dedup(cfg) -> dict:
+    from hisrag.normalize.dedup import SCHEMA, deduplicate
+
+    regions = query("""
+        SELECT ad_id, a.newspaper, a.year, a.date, t.text_norm, t.n_flags, t.ocr_support,
+               a.label <> 'heading' AND NOT t.flag_death_register AND NOT t.flag_too_short
+                   AND NOT t.flag_pc_unsupported AS eligible
+        FROM ads a JOIN ad_text t USING (ad_id)""", cfg=cfg)
+    dups, report = deduplicate(regions)
+    out = derived_dir("ad_dups", cfg)
+    write_partitioned(dups, out, SCHEMA)
+    return {**report, "written_to": str(out)}
+
+
+STEPS = {"text": run_text, "dedup": run_dedup}
 
 
 def main() -> None:
