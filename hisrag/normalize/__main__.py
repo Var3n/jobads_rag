@@ -4,7 +4,8 @@
   dedup   step 3: clusters of repeated printings → derived/ad_dups (needs `text`)
   positions [--pilot] [--thinking] [--batch-size N] [--workers N]
           step 4: position dictionary via the LLM → derived/position_dict, derived/ad_positions.
-          --pilot runs ~80 forms with and without reasoning and writes a review CSV instead.
+          --pilot runs ~80 forms and writes a review CSV instead (with --thinking also a
+          20-form comparison with reasoning).
 """
 
 import argparse
@@ -63,8 +64,8 @@ def _estimate(stats: dict, n_forms: int, batch_size: int, client) -> float:
     return round(stats["seconds"] * rounds / 60, 1)
 
 
-def _pilot(cfg, client, forms, batch_size) -> dict:
-    """80 forms without reasoning (written right away), then 20 of them with reasoning.
+def _pilot(cfg, client, forms, batch_size, with_reasoning=False) -> dict:
+    """80 forms without reasoning (written right away); with --thinking also 20 of them with reasoning.
 
     The reasoning stage is small on purpose: at ~10 tokens/s per request it takes minutes per
     request. If it fails or is interrupted, the no-reasoning results are already on disk.
@@ -81,7 +82,7 @@ def _pilot(cfg, client, forms, batch_size) -> dict:
     sample = P.pilot_sample(forms)
     review = sample[["key", "surface", "count", "context"]].copy()
 
-    print(f"[1/2] {len(sample)} forms without reasoning, {batch_size} per request …", file=sys.stderr)
+    print(f"[1/{2 if with_reasoning else 1}] {len(sample)} forms without reasoning, {batch_size} per request …", file=sys.stderr)
     off, stats_off = P.run(client, sample, batch_size=batch_size, thinking=False)
     review["no_reasoning"] = [fmt(off[k]) if k in off else "FAILED" for k in review["key"]]
     review.to_csv(csv, index=False, encoding="utf-8-sig")
@@ -91,6 +92,9 @@ def _pilot(cfg, client, forms, batch_size) -> dict:
               "estimated_full_run_minutes_no_reasoning": _estimate(stats_off, len(forms), batch_size, client),
               "review_csv": str(csv)}
 
+    if not with_reasoning:
+        report["usage"] = client.usage.summary()
+        return report
     subset = sample.iloc[:: max(len(sample) // PILOT_THINKING_FORMS, 1)].head(PILOT_THINKING_FORMS)
     print(f"[2/2] {len(subset)} of them with reasoning, {PILOT_THINKING_BATCH} per request "
           "(minutes per request; Ctrl+C keeps the results above) …", file=sys.stderr)
@@ -123,10 +127,12 @@ def run_positions(cfg, pilot=False, thinking=False, batch_size=25, workers=None)
         client.max_workers = workers
 
     if pilot:
-        return _pilot(cfg, client, forms, batch_size)
+        return _pilot(cfg, client, forms, batch_size, with_reasoning=thinking)
 
     results, stats = P.run(client, forms, batch_size=batch_size, thinking=thinking)
     dictionary = P.to_dictionary(forms, results, client.model)
+    consistency = P.consistency_report(dictionary)
+    dictionary, harmonized = P.harmonize_categories(dictionary)
     d_out = derived_dir("position_dict", cfg)
     d_out.mkdir(parents=True, exist_ok=True)
     pq.write_table(pa.Table.from_pandas(dictionary, schema=P.DICT_SCHEMA, preserve_index=False),
@@ -139,7 +145,8 @@ def run_positions(cfg, pilot=False, thinking=False, batch_size=25, workers=None)
         "forms_normalized": int(dictionary["is_position"].notna().sum()),
         "forms_that_are_positions": int(dictionary["is_position"].fillna(False).sum()),
         "position_mentions": len(ap), "ads_with_position": int(ap["ad_id"].nunique()),
-        "consistency": P.consistency_report(dictionary),
+        "consistency_before_harmonizing": consistency,
+        "entries_with_harmonized_category": harmonized,
         "top_lemmas": ap["lemma"].value_counts().head(15).to_dict(),
         "categories": ap["category"].value_counts().to_dict(),
     }

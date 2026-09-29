@@ -33,7 +33,7 @@ from pydantic import BaseModel, Field
 from hisrag.llm.client import DHClient
 from hisrag.normalize.text import normalize_text
 
-PROMPT_VERSION = "positions-v1"
+PROMPT_VERSION = "positions-v2"
 
 CATEGORIES = (
     "Haushalt/Dienstboten",
@@ -75,30 +75,35 @@ class BatchResult(BaseModel):
 
 
 SYSTEM_PROMPT = f"""Du normalisierst Berufs- und Stellenbezeichnungen aus historischen Stellenanzeigen der Wiener Zeitung (1850–1950).
-Die Formen wurden automatisch extrahiert; manche sind keine Berufsbezeichnungen (Füllwörter, Adjektive, Satzteile).
+Die Formen wurden automatisch aus OCR-Text extrahiert; manche sind keine Berufsbezeichnungen (Füllwörter, Adjektive, Satzteile), manche enthalten OCR-Fehler.
+
+Beurteile immer die FORM SELBST. Der Kontext dient nur dazu, die Bedeutung zu verstehen; übernimm keine anderen Wörter oder Geschlechter aus dem Kontext.
 
 Für jede Form gibst du eine Liste von Einträgen zurück:
-- leer, wenn die Form keine konkrete Berufs- oder Stellenbezeichnung ist ("eine", "mit", "sucht", "Stelle", "Posten", "Bewerberinnen", "Classe", Ortsnamen);
-- ein Eintrag pro genanntem Beruf; zwei, wenn zwei verschiedene Berufe genannt sind ("Schulleiters- und Lehrerstellen").
-Die Geschlechtsvarianten desselben Berufs ("Lehrer- oder Lehrerinstelle") sind EIN Eintrag mit gender_form "m/f".
+- leer, wenn die Form keine konkrete Berufs- oder Stellenbezeichnung ist ("eine", "mit", "sucht", "Stelle", "Posten", "Bewerberinnen", "Classe", Ortsnamen, Buchtitel);
+- ein Eintrag pro genanntem Beruf; zwei, wenn die Form zwei verschiedene Berufe nennt ("Schulleiters- und Lehrerstellen").
+Nennt die Form selbst beide Geschlechter desselben Berufs ("Lehrer- oder Lehrerinstelle"), ist das EIN Eintrag mit gender_form "m/f".
 
 Felder eines Eintrags:
-- term: die historische Bezeichnung im Nominativ Singular, ohne "-stelle"/"-posten", mit dem Geschlecht der Form. Die Schreibung wird nur modernisiert, wenn es dasselbe Wort bleibt (Wirthschafterin → Wirtschafterin, Secretär → Sekretär); historische Berufswörter bleiben (Commis, Supplent, Kanzlist, Diurnist).
+- term: die Person, die die Stelle innehat, im Nominativ Singular, ohne "-stelle"/"-posten", im Geschlecht der Form. Offensichtliche OCR-Fehler korrigierst du (Klankenwärterin → Krankenwärterin, Verrückenmacher → Perückenmacher, Unteriehrerin → Unterlehrerin). Die Schreibung wird nur modernisiert, wenn es dasselbe Wort bleibt (Wirthschafterin → Wirtschafterin, Secretär → Sekretär); historische Berufswörter bleiben (Commis, Supplent, Kanzlist, Diurnist).
 - lemma: die geschlechtsneutrale Grundform für Gruppierungen, in der Regel die männliche Form (Lehrerin → Lehrer, Köchin → Koch, Wirtschafterin → Wirtschafter).
-- modern: die heutige deutsche Entsprechung, gleiches Geschlecht wie term (Commis → Handlungsgehilfe, Diurnist → Schreibkraft (Tagelöhner), Gouvernante → Hauslehrerin, Supplent → Vertretungslehrer). Wenn der Beruf heute gleich heißt, dasselbe Wort.
-- gender_form: Geschlecht der Wortform selbst: "m", "f", "m/f" (beide genannt) oder "n" (neutral formuliert, z. B. "Lehrstelle", "Lehrkraft").
-- category: genau eine von: {", ".join(CATEGORIES)}.
+- modern: die heutige deutsche Entsprechung im Geschlecht von term (Commis → Handlungsgehilfe, Diurnist → Schreibkraft, Gouvernante → Hauslehrerin, Supplent → Vertretungslehrer, Perückenmacher → Perückenmacher). Wenn der Beruf heute gleich heißt, dasselbe Wort. Erfinde keine Bedeutung für Wörter, die du nicht kennst.
+- gender_form: Geschlecht der Wortform selbst: "f" für weibliche Formen (Lehrerin, Lehrerinstelle, Unterlehrerin, Köchin, Gouvernante), "m" für männliche Formen (Lehrer, Lehrers, Lehrerstelle, Unterlehrerstelle, Supplentenstelle), "m/f" nur wenn die Form beide nennt, "n" nur für geschlechtsneutrale Wörter (Lehrstelle, Lehrkanzel, Lehrkraft, Personal).
+- category: das Feld, in dem dieser Beruf in solchen Anzeigen typischerweise vorkommt, genau eine von: {", ".join(CATEGORIES)}. Köchin, Koch, Stubenmädchen, Hausdiener → Haushalt/Dienstboten (Gastgewerbe nur bei Gasthaus, Hotel, Restaurant im Namen: Hotelkoch, Kellner).
+confidence: "low", wenn die Form verstümmelt oder mehrdeutig ist und du die Korrektur nur vermutest.
 
-Achtung: In österreichischen Ausschreibungen bedeutet "Lehrstelle" meist eine Stelle als Lehrer (nicht Ausbildungsplatz), "Lehrkanzel" eine Professur. Nutze den Kontext.
-confidence: "low", wenn die Form verstümmelt oder mehrdeutig ist.
+Hinweise: In österreichischen Ausschreibungen bedeutet "Lehrstelle" eine Stelle als Lehrer (nicht Ausbildungsplatz), "Lehrkanzel" eine Professur, "Supplent" einen Vertretungslehrer, "Diurnist" eine Hilfsschreibkraft im Tagelohn.
 
 Beispiele:
-- "Unterlehrer-" (Kontext: "Die Unterlehrer-, resp. Unterlehrerinstelle an der Volksschule") → [{{"term": "Unterlehrer", "lemma": "Unterlehrer", "modern": "Grundschullehrer", "gender_form": "m", "category": "Erziehung/Unterricht"}}]
-- "Lehrerinstelle" → [{{"term": "Lehrerin", "lemma": "Lehrer", "modern": "Lehrerin", "gender_form": "f", "category": "Erziehung/Unterricht"}}]
+- "Unterlehrer-" (Kontext: "Die Unterlehrer-, resp. Unterlehrerinstelle") → [{{"term": "Unterlehrer", "lemma": "Unterlehrer", "modern": "Hilfslehrer", "gender_form": "m", "category": "Erziehung/Unterricht"}}]
+- "Lehrerinstelle" (Kontext: "Eine Lehrer- oder Lehrerinstelle") → [{{"term": "Lehrerin", "lemma": "Lehrer", "modern": "Lehrerin", "gender_form": "f", "category": "Erziehung/Unterricht"}}]
+- "Lehrstelle" → [{{"term": "Lehrer", "lemma": "Lehrer", "modern": "Lehrer", "gender_form": "n", "category": "Erziehung/Unterricht"}}]
+- "Lehrkanzel" → [{{"term": "Professor", "lemma": "Professor", "modern": "Professor", "gender_form": "n", "category": "Erziehung/Unterricht"}}]
 - "Wirthschafterin" → [{{"term": "Wirtschafterin", "lemma": "Wirtschafter", "modern": "Hauswirtschafterin", "gender_form": "f", "category": "Haushalt/Dienstboten"}}]
 - "Commis" → [{{"term": "Commis", "lemma": "Commis", "modern": "Handlungsgehilfe", "gender_form": "m", "category": "Handel/Verkauf"}}]
 - "Kanzlistenstelle" → [{{"term": "Kanzlist", "lemma": "Kanzlist", "modern": "Verwaltungsangestellter", "gender_form": "m", "category": "Öffentliche Verwaltung"}}]
-- "Bedienter" → [{{"term": "Bedienter", "lemma": "Bedienter", "modern": "Hausdiener", "gender_form": "m", "category": "Haushalt/Dienstboten"}}]
+- "Klankenwärterin" → [{{"term": "Krankenwärterin", "lemma": "Krankenwärter", "modern": "Krankenpflegerin", "gender_form": "f", "category": "Gesundheit/Pflege"}}]
+- "Lehrer- oder Lehrerinstelle" → [{{"term": "Lehrer", "lemma": "Lehrer", "modern": "Lehrer", "gender_form": "m/f", "category": "Erziehung/Unterricht"}}]
 - "eine" → []
 
 Antworte mit einem JSON-Objekt {{"items": [...]}} mit genau einem Element pro Form, "i" = Nummer der Form."""
@@ -215,6 +220,33 @@ def to_dictionary(forms: pd.DataFrame, results: dict[str, FormResult], model: st
     d["prompt_version"] = PROMPT_VERSION
     d["model"] = model
     return d[DICT_SCHEMA.names]
+
+
+def harmonize_categories(dictionary: pd.DataFrame) -> tuple[pd.DataFrame, int]:
+    """Give every entry of a lemma the category most of its forms received (weighted by count).
+
+    Each form is judged from one context snippet, so the same occupation can land in different
+    categories (Köchin: Haushalt vs. Gastgewerbe). Returns the dictionary and the number of
+    entries whose category changed.
+    """
+    votes: dict[str, Counter] = {}
+    for entries, count in zip(dictionary["entries"], dictionary["count"]):
+        for e in entries or []:
+            votes.setdefault(e["lemma"].lower(), Counter())[e["category"]] += int(count)
+    majority = {lemma: c.most_common(1)[0][0] for lemma, c in votes.items()}
+    changed = 0
+    new_entries = []
+    for entries in dictionary["entries"]:
+        if entries is None:
+            new_entries.append(None)
+            continue
+        fixed = []
+        for e in entries:
+            cat = majority[e["lemma"].lower()]
+            changed += cat != e["category"]
+            fixed.append({**e, "category": cat})
+        new_entries.append(fixed)
+    return dictionary.assign(entries=new_entries), changed
 
 
 def consistency_report(dictionary: pd.DataFrame) -> dict:

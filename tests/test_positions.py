@@ -100,3 +100,15 @@ def test_consistency_report_finds_conflicting_categories():
     rep = P.consistency_report(d)
     assert rep["lemmas_with_conflicting_category"] == 1
     assert rep["examples"]["Lehrer"] == {"Erziehung/Unterricht": 5, "Sonstiges": 2}
+
+
+def test_harmonize_categories_uses_count_weighted_majority():
+    d = pd.DataFrame({"count": [280, 3, 10], "entries": [
+        [entry("Köchin", "Koch", "f", "Haushalt/Dienstboten")],
+        [entry("Hotelköchin", "Koch", "f", "Gastgewerbe")],
+        [entry("Lehrer", "Lehrer")],
+    ]})
+    fixed, changed = P.harmonize_categories(d)
+    assert changed == 1
+    assert fixed["entries"][1][0]["category"] == "Haushalt/Dienstboten"
+    assert fixed["entries"][2][0]["category"] == "Erziehung/Unterricht"

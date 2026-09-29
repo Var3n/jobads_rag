@@ -83,9 +83,14 @@ matching. Writes `data/derived/position_dict/` (one row per form) and `data/deri
 position mention in an ad, from spans or the linked heading).
 
 ```bash
-python -m hisrag.normalize positions --pilot   # ~80 forms with and without reasoning → data/derived/pilot/positions_pilot.csv
-python -m hisrag.normalize positions           # full run (add --thinking if the pilot shows it helps)
+python -m hisrag.normalize positions --pilot   # ~80 forms → data/derived/pilot/positions_pilot.csv (a few minutes)
+python -m hisrag.normalize positions           # full run, ~45 min at 16 parallel requests
 ```
+
+Reasoning (`--thinking`) was tested in the pilot and is off by default: ~1,450 output tokens per form (≈11 h for
+the full run instead of ~45 min) for answers that differed mainly in category choices, not clearly for the
+better. Because each form is judged from one context, every lemma afterwards gets the category most of its
+forms received (weighted by frequency).
 
 Responses are cached, so re-running after an interruption only sends what is missing.
 
