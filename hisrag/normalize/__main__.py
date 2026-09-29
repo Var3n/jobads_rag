@@ -6,6 +6,10 @@
           step 4: position dictionary via the LLM → derived/position_dict, derived/ad_positions.
           --pilot runs ~80 forms and writes a review CSV instead (with --thinking also a
           20-form comparison with reasoning).
+  requirements [--pilot] [--batch-size N] [--workers N]
+          step 5: requirement tags via the LLM, vocabulary from vocab/requirements.yaml →
+          derived/requirement_dict, derived/ad_requirements. --pilot maps 20 phrases per column
+          and writes a review CSV instead.
 """
 
 import argparse
@@ -152,7 +156,60 @@ def run_positions(cfg, pilot=False, thinking=False, batch_size=25, workers=None)
     }
 
 
-STEPS = {"text": run_text, "dedup": run_dedup, "positions": run_positions}
+def _requirement_spans(cfg):
+    from hisrag.normalize.requirements import COLUMNS
+
+    selects = " UNION ALL ".join(
+        f"""SELECT a.ad_id, a.newspaper, a.year, '{c}' AS "column", a.text,
+                   u.s.start AS start, u.s."end" AS "end", u.s.text AS phrase
+            FROM ads a JOIN ad_text t USING (ad_id), UNNEST(a.{c}) AS u(s)
+            WHERE NOT t.flag_death_register""" for c in COLUMNS)
+    return query(selects, cfg=cfg)
+
+
+def run_requirements(cfg, pilot=False, batch_size=40, workers=None) -> dict:
+    import sys
+
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    from hisrag.llm import DHClient
+    from hisrag.normalize import requirements as R
+
+    spans = _requirement_spans(cfg)
+    phrases = R.collect_phrases(spans)
+    mapper = R.RequirementMapper()
+    client = DHClient(cfg)
+    if workers:
+        client.max_workers = workers
+    base = {"vocabulary_version": mapper.vocab.version, "phrases_total": len(phrases),
+            "phrases_by_column": phrases["column"].value_counts().to_dict()}
+
+    if pilot:
+        sample = R.pilot_sample(phrases)
+        print(f"{len(sample)} phrases, {batch_size} per request …", file=sys.stderr)
+        results, stats = mapper.run(client, sample, batch_size=batch_size)
+        review = sample[["column", "surface", "count", "context"]].copy()
+        review["tags"] = [R.format_tags(results[k]) if k in results else "FAILED" for k in sample["key"]]
+        out = derived_dir("pilot", cfg)
+        out.mkdir(parents=True, exist_ok=True)
+        review.to_csv(out / "requirements_pilot.csv", index=False, encoding="utf-8-sig")
+        return {**base, "pilot": stats, "review_csv": str(out / "requirements_pilot.csv"),
+                "estimated_full_run_minutes": _estimate(stats, len(phrases), batch_size, client),
+                "usage": client.usage.summary()}
+
+    results, stats = mapper.run(client, phrases, batch_size=batch_size)
+    dictionary = mapper.to_dictionary(phrases, results, client.model)
+    d_out = derived_dir("requirement_dict", cfg)
+    d_out.mkdir(parents=True, exist_ok=True)
+    pq.write_table(pa.Table.from_pandas(dictionary, schema=R.DICT_SCHEMA, preserve_index=False),
+                   d_out / "part-0.parquet")
+    ad_req = R.ad_requirements(spans, dictionary)
+    write_partitioned(ad_req, derived_dir("ad_requirements", cfg), R.AD_REQUIREMENTS_SCHEMA)
+    return {**base, **stats, **R.summarize(dictionary, ad_req), "usage": client.usage.summary()}
+
+
+STEPS = {"text": run_text, "dedup": run_dedup, "positions": run_positions, "requirements": run_requirements}
 
 
 def main() -> None:
@@ -160,13 +217,16 @@ def main() -> None:
     parser.add_argument("step", choices=STEPS)
     parser.add_argument("--pilot", action="store_true", help="positions: pilot run with review CSV")
     parser.add_argument("--thinking", action="store_true", help="positions: enable reasoning")
-    parser.add_argument("--batch-size", type=int, default=25, help="positions: forms per request")
+    parser.add_argument("--batch-size", type=int, default=None,
+                        help="forms per request (positions: 25, requirements: 40)")
     parser.add_argument("--workers", type=int, default=None, help="positions: parallel requests")
     args = parser.parse_args()
     cfg = load_config()
     if args.step == "positions":
         report = run_positions(cfg, pilot=args.pilot, thinking=args.thinking,
-                               batch_size=args.batch_size, workers=args.workers)
+                               batch_size=args.batch_size or 25, workers=args.workers)
+    elif args.step == "requirements":
+        report = run_requirements(cfg, pilot=args.pilot, batch_size=args.batch_size or 40, workers=args.workers)
     else:
         report = STEPS[args.step](cfg)
     print(json.dumps(report, ensure_ascii=False, indent=1, default=str))

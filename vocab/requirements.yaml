@@ -1,0 +1,112 @@
+# Controlled vocabulary for requirement phrases (step 5).
+#
+# Every extracted phrase (columns job_specific, background, language, activity,
+# attitude_towards_work, interpersonal) is mapped to zero or more tags:
+#   dimension: one of the keys below (fixed)
+#   value:     short, modern German; from `values` if the dimension has a closed list,
+#              otherwise free (examples show the intended granularity)
+#   detail:    optional qualifier: language level, number of years, amount, "bevorzugt" …
+#
+# Edit freely: descriptions and examples go straight into the LLM prompt. Changing this file
+# changes the prompt version, so the next run re-maps all phrases.
+
+version: 1
+
+groups:
+  Person:
+    alter:
+      description: Alter oder Altersgrenze der Person
+      value_rule: 'jung | mittleres Alter | älter | "<N> Jahre" | "bis <N> Jahre" | "ab <N> Jahre"'
+      examples: {"junger": "jung", "in besten Jahren": "mittleres Alter", "30 Jahre alt": "30 Jahre", "das 45. Lebensjahr nicht überschritten": "bis 45 Jahre"}
+    geschlecht:
+      description: ausdrücklich genanntes Geschlecht (nur wenn es selbst die Anforderung ist, nicht aus der Wortform)
+      values: [männlich, weiblich]
+    familienstand:
+      description: Familienstand
+      values: [ledig, verheiratet, verwitwet, geschieden]
+    kinder:
+      description: Kinder der Person
+      values: [kinderlos, mit Kindern]
+    religion:
+      description: Religionsbekenntnis
+      values: [katholisch, evangelisch, israelitisch, christlich, andere]
+    herkunft:
+      description: regionale oder nationale Herkunft, Wohnort, Zuständigkeit
+      examples: {"vom Lande": "vom Land", "aus Norddeutschland": "Norddeutschland", "Französin": "Frankreich", "Wienerin": "Wien"}
+    staatsbuergerschaft_heimatrecht:
+      description: Staatsbürgerschaft, Heimatrecht, Heimatzuständigkeit als Voraussetzung
+      examples: {"österreichische Staatsbürgerschaft": "österreichische Staatsbürgerschaft"}
+    soziale_stellung:
+      description: soziale Herkunft, Stand, allgemeine Bildung als Standesmerkmal
+      examples: {"aus gutem Hause": "gutes Haus", "gebildete": "gebildet", "Besseres (Mädchen)": "besserer Stand", "älternlos": "Waise"}
+    bildung:
+      description: Schul-, Fach- oder Hochschulbildung (Abschlüsse, besuchte Schulen)
+      examples: {"absolvirter Hörer einer technischen Hochschule": "technische Hochschule", "einige Gymnasialclassen zurückgelegt": "Gymnasium (teilweise)", "Maturitätsprüfung": "Matura"}
+    militaerdienst:
+      description: Militärdienst, Anspruch ausgedienter Unteroffiziere (Zertifikatisten)
+      examples: {"ausgedienter Feldwebel": "ausgedienter Unteroffizier", "noch dienende Militärpersonen": "aktiver Militärdienst"}
+    gesundheit_aeusseres:
+      description: Gesundheit, körperliche Eignung, Aussehen
+      examples: {"gesund": "gesund", "körperliche Rüstigkeit": "rüstig", "von angenehmem Aeußern": "angenehmes Äußeres"}
+    beschaeftigungsstatus:
+      description: derzeitige Beschäftigung der Person
+      examples: {"in Stellung": "in Stellung", "disponible": "verfügbar", "noch in Dienst": "in Stellung"}
+
+  Qualifikation:
+    formale_qualifikation:
+      description: Prüfungen, Befähigungsnachweise, Diplome, Lehrbefähigung, Staatsprüfungen
+      examples: {"geprüfte": "geprüft", "ungeprüfte": "ungeprüft", "Lehrbefähigungszeugnis": "Lehrbefähigung", "3 theoretische Staatsprüfungen": "Staatsprüfungen", "diplomirte": "Diplom"}
+    berufserfahrung:
+      description: Praxis, Dienstjahre, frühere Stellungen, Qualifikationsniveau
+      examples: {"mit vieljähriger Praxis": "langjährige Praxis", "durch 14 Jahre ... als Disponent": "Disponent", "Erste Kraft": "erste Kraft", "mehrere Jahre bei hohen Herrschaften gedient": "Herrschaftsdienst"}
+    fachkenntnisse:
+      description: konkrete Fertigkeiten und Fachkenntnisse (ein Tag pro Fertigkeit)
+      examples: {"Buchhaltung": "Buchhaltung", "weibliche Handarbeiten": "Handarbeiten", "Kleidermachen": "Schneidern", "schöne Handschrift": "Schönschrift", "kocht gut": "Kochen", "Platzkenntnisse": "Ortskenntnis", "Stenographie": "Stenografie"}
+    sprachkenntnisse:
+      description: Sprachen, die die Person beherrscht oder beherrschen soll; Niveau in `detail`
+      values: [Deutsch, Tschechisch, Französisch, Italienisch, Englisch, Ungarisch, Polnisch, Ruthenisch, Slowenisch, Kroatisch, Serbisch, Rumänisch, Russisch, Spanisch, Latein, Griechisch, Hebräisch, slawische Sprachen, Landessprachen, mehrere Sprachen]
+      examples: {"der deutschen Sprache in Wort und Schrift mächtig": "Deutsch (detail: in Wort und Schrift)", "böhmisch": "Tschechisch", "beider Landessprachen": "Landessprachen"}
+    zeugnisse_referenzen:
+      description: Dienstzeugnisse, Empfehlungen, Referenzen, Leumund
+      examples: {"mit guten Zeugnissen": "gute Zeugnisse", "polizeiliches Führungszeugnis": "Führungszeugnis", "beste Empfehlungen": "Empfehlungen"}
+    kaution_vermoegen:
+      description: Kaution, Sicherstellung, eigenes Vermögen oder Kapital
+      examples: {"Caution von 200 fl.": "Kaution (detail: 200 fl.)", "mit Vermögen": "Vermögen"}
+
+  Eigenschaften:
+    arbeitshaltung:
+      description: Arbeitsweise und Tüchtigkeit
+      suggested_values: [tüchtig, gründlich, verlässlich, fleißig, praktisch, gewandt, geschickt, schnell, genau, routiniert, selbständig, strebsam, ordentlich, pünktlich, ausdauernd, sparsam]
+    charakter_auftreten:
+      description: Charakter, Moral, Umgangsformen
+      suggested_values: [solide, anständig, ehrlich, treu, brav, bescheiden, freundlich, sittlich, unbescholten, verträglich, gute Umgangsformen, repräsentativ]
+
+  Stelle:
+    taetigkeit:
+      description: Aufgaben und Tätigkeiten der Stelle
+      examples: {"Hausadministration": "Hausverwaltung", "Einkassirungen": "Inkasso", "Kinder zu pflegen und zu erziehen": "Kinderbetreuung", "zu Commissionsgängen": "Botengänge"}
+    unterrichtsfach:
+      description: unterrichtetes Fach (Lehrstellen, Privatunterricht)
+      examples: {"Freihandzeichnen": "Freihandzeichnen", "Latein und Griechisch als Nebenfach": "Latein; Griechisch (detail: Nebenfach)", "Clavier": "Klavier", "Normalgegenstände": "Volksschulfächer"}
+    unterrichtssprache:
+      description: Unterrichtssprache der Schule (Merkmal der Stelle, nicht Anforderung an die Person)
+      values: [Deutsch, Tschechisch, Italienisch, Polnisch, Ruthenisch, Slowenisch, Kroatisch, Serbisch, Rumänisch, Ungarisch]
+      examples: {"mit böhmischer Unterrichtssprache": "Tschechisch", "deutscher Unterrichtssprache": "Deutsch"}
+    arbeitszeit_umfang:
+      description: Umfang und Dauer der Beschäftigung
+      examples: {"Nebenbeschäftigung": "Nebenbeschäftigung", "einige freie Stunden": "stundenweise", "für den Sommer": "saisonal", "dauernd": "dauerhaft", "Aushilfe": "Aushilfe"}
+    arbeitsort_mobilitaet:
+      description: Arbeitsort oder Bereitschaft zu Ortswechsel und Reisen
+      examples: {"hier oder auf dem Lande": "Wien oder Land", "nach Außerhalb": "auswärts", "reisen": "Reisebereitschaft"}
+    anstellungsbedingungen:
+      description: angebotene Bedingungen, die keine Anforderung sind (Rangsklasse, Bezüge, Wohnung, Pension)
+      examples: {"mit den Bezügen der XI. Rangsclasse": "Rangsklasse XI", "womit die bisherigen Bezüge verbunden sind": "Bezüge", "Naturalwohnung": "Dienstwohnung"}
+
+  Bewerbung:
+    bewerbungsformalitaeten:
+      description: Form der Bewerbung und beizulegende Unterlagen, die keine Qualifikation sind
+      examples: {"gehörig instruierten (Gesuche)": "vorschriftsmäßiges Gesuch", "eigenhändig geschriebenen": "eigenhändig geschrieben", "mit dem Tauf- und Heimatscheine": "Tauf- und Heimatschein", "Proben ihrer Leistungen": "Arbeitsproben", "ungestempelte Diensttabelle": "Diensttabelle"}
+
+  Sonstiges:
+    sonstiges:
+      description: inhaltlich relevante Angabe, die in keine Dimension passt

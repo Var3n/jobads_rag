@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import json
 import re
-import time
 from collections import Counter
 from typing import Literal
 
@@ -30,7 +29,8 @@ import pandas as pd
 import pyarrow as pa
 from pydantic import BaseModel, Field
 
-from hisrag.llm.client import DHClient, StructuredOutputError
+from hisrag.llm.client import DHClient
+from hisrag.normalize.batching import run_batches
 from hisrag.normalize.text import normalize_text
 
 PROMPT_VERSION = "positions-v2"
@@ -161,56 +161,11 @@ def _messages(batch: pd.DataFrame) -> list[dict]:
             {"role": "user", "content": "Formen:\n" + "\n".join(lines)}]
 
 
-# With reasoning, one request can take far longer than the default read timeout (the API
-# generates ~10 tokens/s per request); a timed-out request must not be restarted in a loop.
-THINKING_REQUEST = {"timeout_s": 1800, "max_retries": 0}
-
-
-def normalize_batch(client: DHClient, batch: pd.DataFrame, *, thinking: bool = False) -> dict[str, FormResult]:
-    """Normalize one batch; items the model skipped are retried one by one.
-
-    If the answer cannot be parsed even after the repair attempt (e.g. it broke off mid-JSON),
-    the batch is split in half and each half is sent again: the prompts differ, so the failure
-    is not simply repeated (temperature 0 and the response cache would return the same answer).
-    """
-    opts = THINKING_REQUEST if thinking else {}
-    try:
-        result = client.chat_json(_messages(batch), BatchResult, thinking=thinking,
-                                  max_tokens=16000 if thinking else 6000, **opts)
-    except StructuredOutputError:
-        if len(batch) == 1:
-            return {batch["key"].iloc[0]: FormResult(i=1, entries=[], confidence="low")}
-        half = len(batch) // 2
-        return {**normalize_batch(client, batch.iloc[:half], thinking=thinking),
-                **normalize_batch(client, batch.iloc[half:], thinking=thinking)}
-    by_i = {item.i: item for item in result.items if 1 <= item.i <= len(batch)}
-    out = {}
-    for n, key in enumerate(batch["key"], 1):
-        if n in by_i:
-            out[key] = by_i[n]
-        else:
-            single = client.chat_json(_messages(batch.iloc[[n - 1]]), BatchResult, thinking=thinking,
-                                      max_tokens=8000 if thinking else 4000, **opts)
-            out[key] = single.items[0] if single.items else FormResult(i=1, entries=[], confidence="low")
-    return out
-
-
 def run(client: DHClient, forms: pd.DataFrame, *, batch_size: int = 25, thinking: bool = False,
         progress: bool = True) -> tuple[dict[str, FormResult], dict]:
-    batches = [forms.iloc[i:i + batch_size] for i in range(0, len(forms), batch_size)]
-    t0 = time.monotonic()
-    with client.job_scope(f"positions{'-thinking' if thinking else ''}"):
-        parts = client.map(lambda b: normalize_batch(client, b, thinking=thinking), batches,
-                           desc="positions" if progress else None, return_exceptions=True)
-    results, failed = {}, []
-    for batch, part in zip(batches, parts):
-        if isinstance(part, Exception):
-            failed.append(f"{batch['key'].iloc[0]}…: {type(part).__name__}: {str(part)[:200]}")
-        else:
-            results.update(part)
-    stats = {"forms": len(forms), "batches": len(batches), "failed_batches": failed,
-             "seconds": round(time.monotonic() - t0, 1)}
-    return results, stats
+    return run_batches(client, forms, job=f"positions{'-thinking' if thinking else ''}", batch_size=batch_size,
+                       progress=progress, build_messages=_messages, result_model=BatchResult,
+                       empty_item=lambda: FormResult(i=1, entries=[], confidence="low"), thinking=thinking)
 
 
 DICT_SCHEMA = pa.schema([

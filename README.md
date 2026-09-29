@@ -97,6 +97,21 @@ counts per decade.
 
 Responses are cached, so re-running after an interruption only sends what is missing.
 
+**Step 5: requirement tags (uses the LLM).** Maps every distinct phrase of the columns `job_specific`,
+`background`, `language`, `activity`, `attitude_towards_work` and `interpersonal` (~22,500 on the Wiener Zeitung
+sample, death register excluded) to zero or more tags `dimension` / `value` / `detail`. The 28 dimensions in six
+groups (Person, Qualifikation, Eigenschaften, Stelle, Bewerbung, Sonstiges) are defined in
+[`vocab/requirements.yaml`](vocab/requirements.yaml): demographic dimensions and languages have closed value
+lists, skills and duties free short values. Application formalities ("gehörig instruierte Gesuche") and a school's
+language of instruction are kept apart from requirements of the person. Editing the YAML changes the prompt
+version, so the next run re-maps everything. Writes `data/derived/requirement_dict/` and
+`data/derived/ad_requirements/` (one row per phrase mention and tag).
+
+```bash
+python -m hisrag.normalize requirements --pilot   # 20 phrases per column → data/derived/pilot/requirements_pilot.csv
+python -m hisrag.normalize requirements           # full run, ~560 requests
+```
+
 Query the result from Python or a notebook:
 
 ```python
