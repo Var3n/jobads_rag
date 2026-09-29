@@ -22,14 +22,12 @@ def _deep_merge(base: dict, override: dict) -> dict:
     return out
 
 
-def env_file() -> Path:
-    """The secrets file: $HISRAG_ENV_FILE if set, else .env in the repo root."""
-    return Path(os.environ.get("HISRAG_ENV_FILE", REPO_ROOT / ".env"))
+ENV_FILE = REPO_ROOT / ".env"
 
 
 def load_dotenv(path: Path | None = None) -> None:
-    """Minimal .env reader: KEY=VALUE lines, never overrides variables already set."""
-    path = path or env_file()
+    """Minimal .env reader: KEY=VALUE lines, never overrides variables that are already non-empty."""
+    path = path or ENV_FILE
     if not path.exists():
         return
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -37,7 +35,31 @@ def load_dotenv(path: Path | None = None) -> None:
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, value = line.split("=", 1)
-        os.environ.setdefault(key.strip(), value.strip().strip("'\""))
+        key, value = key.strip(), value.strip().strip("'\"")
+        if value and not os.environ.get(key):
+            os.environ[key] = value
+
+
+def set_api_key(name: str = "DHINFRA_API_KEY", *, save: bool = True, path: Path | None = None) -> None:
+    """Ask for the API key without echoing it, set it for this session and optionally store it in .env.
+
+    Meant for JupyterHub, where .env is hidden in the file browser and no editor may be available.
+    The file is written with owner-only permissions.
+    """
+    from getpass import getpass
+
+    key = getpass(f"{name}: ").strip()
+    if not key:
+        raise ValueError("No key entered")
+    os.environ[name] = key
+    if not save:
+        return
+    path = path or ENV_FILE
+    lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+    lines = [line for line in lines if line.split("=", 1)[0].strip() != name] + [f"{name}={key}"]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    path.chmod(0o600)
+    print(f"Saved {name} to {path}")
 
 
 class Config(dict):
@@ -49,7 +71,7 @@ class Config(dict):
 
     @property
     def api_key(self) -> str | None:
-        return os.environ.get(self["api"]["api_key_env"])
+        return os.environ.get(self["api"]["api_key_env"]) or None
 
 
 def load_config(path: Path | str | None = None, local: Path | str | None = None) -> Config:

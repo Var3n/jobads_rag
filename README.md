@@ -12,8 +12,11 @@ cd jobads_rag
 mamba env create -f environment.yml
 mamba activate hisrag
 python -m ipykernel install --user --name hisrag --display-name "hisrag"
-cp .env.example .env        # then put your DHINFRA_API_KEY in .env
 ```
+
+API key: the first notebook cell asks for it if it is missing and stores it in `.env` (owner-only
+permissions). `.env` is hidden in the JupyterHub file browser; that's expected. To set it by hand instead:
+`python -c "import hisrag; hisrag.set_api_key()"`.
 
 Data is not part of the repo. Put the CSV at `data/raw/wrz_extractions.csv`, or point to it in a
 `config.local.yaml` (gitignored), which overrides any key of `config.yaml`:
