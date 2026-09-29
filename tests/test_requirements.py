@@ -141,3 +141,4 @@ def test_ungrounded_details_are_dropped_from_dictionary(cfg):
     results, _ = mapper.run(DHClient(cfg, openai_client=FakeOpenAI(handler)), phrases, progress=False)
     d = mapper.to_dictionary(phrases, results, "qwen")
     assert d["tags"][0][0]["detail"] is None and mapper.details_dropped == 1
+    assert d["tags"][0][0]["detail_raw"] == "in Wort und Schrift"

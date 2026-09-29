@@ -109,8 +109,14 @@ version, so the next run re-maps everything. Writes `data/derived/requirement_di
 
 ```bash
 python -m hisrag.normalize requirements --pilot   # 20 phrases per column → data/derived/pilot/requirements_pilot.csv
-python -m hisrag.normalize requirements           # full run, ~560 requests
+python -m hisrag.normalize requirements           # full run, ~560 requests (~1 h 50 min)
 ```
+
+Two checks run after the model: a `detail` is kept only if its words occur in the phrase (the model's original is kept
+as `detail_raw` for auditing), and values of closed-list dimensions are marked `in_vocab`. Re-running the step after a
+code change is fast, since unchanged requests come from the response cache; editing the YAML re-maps everything.
+`notebooks/03_requirements_review.ipynb` shows top values per dimension, dropped details, values outside the lists, and a
+first comparison of personal requirements in ads for female vs. male position titles.
 
 Query the result from Python or a notebook:
 

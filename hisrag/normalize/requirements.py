@@ -184,7 +184,8 @@ class RequirementMapper:
                     detail = None
                     self.details_dropped += 1
                 out.append({"dimension": t.dimension, "group": self.vocab.group_of[t.dimension], "value": value,
-                            "detail": detail, "in_vocab": closed is None or value.lower() in closed})
+                            "detail": detail, "detail_raw": (t.detail or "").strip() or None,
+                            "in_vocab": closed is None or value.lower() in closed})
             tags.append(out)
         d["tags"] = tags
         d["is_informative"] = d["tags"].map(lambda t: bool(t) if t is not None else None)
@@ -193,8 +194,9 @@ class RequirementMapper:
         return d[DICT_SCHEMA.names]
 
 
+# detail_raw keeps the model's detail before the grounding check, so dropped details can be audited.
 TAG = pa.struct([("dimension", pa.string()), ("group", pa.string()), ("value", pa.string()),
-                 ("detail", pa.string()), ("in_vocab", pa.bool_())])
+                 ("detail", pa.string()), ("detail_raw", pa.string()), ("in_vocab", pa.bool_())])
 DICT_SCHEMA = pa.schema([
     ("key", pa.string()), ("column", pa.string()), ("phrase_key", pa.string()), ("surface", pa.string()),
     ("count", pa.int32()), ("context", pa.string()), ("tags", pa.list_(TAG)), ("is_informative", pa.bool_()),
