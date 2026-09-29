@@ -42,11 +42,30 @@ python -m hisrag.ingest                      # uses paths.raw_csv
 python -m hisrag.ingest other_paper.csv      # one CSV per newspaper; re-running replaces its partitions
 ```
 
+**Step 2: text normalization and quality flags.** Writes `data/derived/ad_text/`: `text_norm` / `heading_norm`
+(for search only: `ſ`→s, line-break hyphens rejoined, quotes unified; historical spellings are kept),
+a language guess (`de`/`it`/`fr`), raw quality metrics, and these flags:
+
+| Flag | Meaning | Wiener Zeitung |
+|---|---|---|
+| `flag_pc_repetition` | post-correction looped or duplicated text | 278 |
+| `flag_pc_expanded` | post-correction >1.3× as long as the OCR | 446 |
+| `flag_pc_unsupported` | <60 % of the corrected text is supported by the OCR: reconstructed from noise, possibly invented | 268 |
+| `flag_too_short` | under 30 characters | 186 |
+| `flag_death_register` | entry of the Vienna death register, not an ad (1860s–1890s) | 1,184 |
+
+```bash
+python -m hisrag.normalize text
+```
+
+`notebooks/01_quality_review.ipynb` shows flagged regions next to their scanned clipping for checking.
+
 Query the result from Python or a notebook:
 
 ```python
 from hisrag.data import query
 query("SELECT decade, label, count(*) AS n FROM ads GROUP BY ALL ORDER BY ALL")
+query("SELECT a.text, t.lang FROM ads a JOIN ad_text t USING (ad_id) WHERE t.n_flags = 0 LIMIT 5")
 ```
 
 ## Layout
@@ -60,7 +79,7 @@ query("SELECT decade, label, count(*) AS n FROM ads GROUP BY ALL ORDER BY ALL")
 | `hisrag/agent/` | Steps 10–12: tools, agent loop, playground |
 | `hisrag/graph/` | Step 14: concept graph |
 | `hisrag/eval/` | Synthetic retrieval checks, citation checker, interaction log |
-| `hisrag/data.py` | DuckDB view `ads` over the Parquet dataset |
+| `hisrag/data.py` | Parquet storage; DuckDB views `ads` and one per derived table (`ad_text`, …) |
 | `notebooks/` | Notebooks to run on the cluster; they only call package code |
 
 ## Tests

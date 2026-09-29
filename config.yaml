@@ -5,6 +5,7 @@ paths:
   data_dir: data                       # relative paths resolve against the repo root
   raw_csv: data/raw/wrz_extractions.csv
   ads_dir: data/ads                      # Parquet, partitioned newspaper=…/year=…
+  derived_dir: data/derived              # one partitioned table per pipeline step, keyed by ad_id
   cache_db: data/cache/llm_cache.sqlite
   usage_log: data/logs/usage.jsonl
 

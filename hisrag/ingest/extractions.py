@@ -14,7 +14,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pyarrow as pa
-import pyarrow.dataset as ds
+
+from hisrag.data import write_partitioned
 
 # CSV column → output column. `gender` is folded into `positions`.
 SPAN_COLUMNS = {
@@ -176,15 +177,5 @@ def summarize(df: pd.DataFrame) -> dict:
 
 
 def write_ads(df: pd.DataFrame, out_dir: Path | str) -> None:
-    """Write as a Hive-partitioned Parquet dataset (newspaper=…/year=…).
-
-    Re-running replaces only the partitions present in `df`, so newspapers can be ingested one
-    CSV at a time.
-    """
-    table = pa.Table.from_pandas(df[SCHEMA.names], schema=SCHEMA, preserve_index=False)
-    ds.write_dataset(
-        table, out_dir, format="parquet",
-        partitioning=ds.partitioning(pa.schema([("newspaper", pa.string()), ("year", pa.int16())]), flavor="hive"),
-        existing_data_behavior="delete_matching",
-        basename_template="part-{i}.parquet",
-    )
+    """Write as a Hive-partitioned Parquet dataset (newspaper=…/year=…)."""
+    write_partitioned(df, out_dir, SCHEMA)
