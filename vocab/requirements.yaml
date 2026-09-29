@@ -12,7 +12,7 @@
 # Edit freely: descriptions and examples go straight into the LLM prompt. Changing this file
 # changes the prompt version, so the next run re-maps all phrases.
 
-version: 1
+version: 2
 
 groups:
   Person:
@@ -66,8 +66,8 @@ groups:
       examples: {"Buchhaltung": "Buchhaltung", "weibliche Handarbeiten": "Handarbeiten", "Kleidermachen": "Schneidern", "schöne Handschrift": "Schönschrift", "kocht gut": "Kochen", "Platzkenntnisse": "Ortskenntnis", "Stenographie": "Stenografie"}
     sprachkenntnisse:
       description: Sprachen, die die Person beherrscht oder beherrschen soll; Niveau in `detail`
-      values: [Deutsch, Böhmisch, Tschechisch, Mährisch, Französisch, Italienisch, Englisch, Ungarisch, Polnisch, Ruthenisch, Slovenisch, Kroatisch, Serbisch, Serbokroatisch, Romanisch, Rumänisch, Russisch, Spanisch, Latein, Griechisch, Hebräisch, slavische Sprachen, Landessprachen, mehrere Sprachen]
-      examples: {"der deutschen Sprache in Wort und Schrift mächtig": "Deutsch (detail: in Wort und Schrift)", "böhmisch": "Böhmisch", "tschechisch": "Tschechisch", "beider Landessprachen": "Landessprachen"}
+      values: [Deutsch, Böhmisch, Tschechisch, Mährisch, Französisch, Italienisch, Englisch, Ungarisch, Polnisch, Ruthenisch, Slovenisch, Windisch, Kroatisch, Illyrisch, Serbisch, Serbokroatisch, Romanisch, Walachisch, Rumänisch, Russisch, Spanisch, Latein, Griechisch, Hebräisch, slavische Sprachen, Landessprachen, mehrere Sprachen]
+      examples: {"der deutschen Sprache in Wort und Schrift mächtig": "Deutsch (detail: in Wort und Schrift)", "böhmisch": "Böhmisch", "tschechisch": "Tschechisch", "walachisch": "Walachisch", "beider Landessprachen": "Landessprachen"}
     zeugnisse_referenzen:
       description: Dienstzeugnisse, Empfehlungen, Referenzen, Leumund
       examples: {"mit guten Zeugnissen": "gute Zeugnisse", "polizeiliches Führungszeugnis": "Führungszeugnis", "beste Empfehlungen": "Empfehlungen"}
@@ -92,7 +92,7 @@ groups:
       examples: {"Freihandzeichnen": "Freihandzeichnen", "Latein und Griechisch als Nebenfach": "Latein; Griechisch (detail: Nebenfach)", "Clavier": "Klavier", "Normalgegenstände": "Volksschulfächer"}
     unterrichtssprache:
       description: Unterrichtssprache der Schule (Merkmal der Stelle, nicht Anforderung an die Person)
-      values: [Deutsch, Böhmisch, Tschechisch, Italienisch, Polnisch, Ruthenisch, Slovenisch, Kroatisch, Serbisch, Serbokroatisch, Rumänisch, Ungarisch]
+      values: [Deutsch, Böhmisch, Tschechisch, Italienisch, Polnisch, Ruthenisch, Slovenisch, Windisch, Kroatisch, Serbisch, Serbokroatisch, Walachisch, Rumänisch, Ungarisch]
       examples: {"mit böhmischer Unterrichtssprache": "Böhmisch", "deutscher Unterrichtssprache": "Deutsch"}
     arbeitszeit_umfang:
       description: Umfang und Dauer der Beschäftigung

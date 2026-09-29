@@ -81,9 +81,11 @@ Die Ausdrücke wurden automatisch aus OCR-Text extrahiert: Anforderungen an Bewe
 
 Für jeden Ausdruck gibst du eine Liste von Tags zurück, je Tag: dimension (aus der Liste unten), value (kurz, modernes Deutsch), detail (optional: Niveau, Anzahl, Betrag, "bevorzugt" …, sonst null).
 Regeln:
+- Tagge nur, was im Ausdruck selbst steht. Der Kontext hilft nur zu entscheiden, WELCHE Dimension gemeint ist (z. B. ob "deutscher" zu "Unterrichtssprache" gehört); er liefert keine zusätzlichen Tags, Werte oder Details. "gründlich" ergibt nur gründlich, auch wenn im Kontext "gründlich und schnell" steht; "Kenntnis der deutschen Sprache" hat kein detail.
+- Stehen mehrere Kontexte (getrennt durch ‖) dabei, kommt der Ausdruck in verschiedenen Anzeigen vor: wähle die Deutung, die allgemein zutrifft, nicht die eines einzelnen Kontexts.
 - Ein Tag pro Information; Aufzählungen ergeben mehrere Tags ("Buchhaltung, Correspondenz und Stenographie" → drei Tags fachkenntnisse).
 - Leere Liste für Bruchstücke ohne erkennbaren Inhalt ("welches fähig ist", "ord", "ge", "kundig" allein).
-- Beurteile den Ausdruck selbst; der Kontext dient nur zum Verständnis (z. B. ob "deutscher" zu "Unterrichtssprache" gehört).
+- Bevorzugte Werte nur verwenden, wenn sie die Bedeutung treffen; sonst das eigene Wort des Ausdrucks (modernisiert), z. B. "sympathisch".
 - Die angegebene Spalte ist die automatische Einordnung und kann falsch sein; entscheide nach dem Inhalt.
 - Bei Dimensionen mit festen Werten verwendest du genau einen dieser Werte. Die Schreibung wird modernisiert (Correspondenz → Korrespondenz), Sprachbezeichnungen bleiben aber wie in der Quelle (böhmisch → Böhmisch, ruthenisch → Ruthenisch, tschechisch → Tschechisch).
 - Erfinde nichts: verstümmelte Wörter, die du nicht sicher erkennst, lässt du weg.
@@ -105,17 +107,30 @@ def _snippet(text: str, start: int, end: int, width: int = 50) -> str:
     return f"…{left} [{normalize_text(text[start:end])}] {right}…"
 
 
+# Frequent phrases occur in different kinds of ads ("deutsche Sprache" as a skill or as a
+# taught subject); they get several contexts from different years so the model picks the
+# reading that fits the phrase in general, not the one of a single example.
+MULTI_CONTEXT_MIN_COUNT = 3
+MAX_CONTEXTS = 3
+CONTEXT_SEPARATOR = " ‖ "
+
+
 def collect_phrases(spans: pd.DataFrame) -> pd.DataFrame:
-    """One row per (column, phrase key). spans: ad_id, column, text, start, end, phrase."""
+    """One row per (column, phrase key). spans: ad_id, column, text, start, end, phrase (year optional)."""
     spans = spans.assign(pkey=spans["phrase"].map(phrase_key))
     spans = spans[spans["pkey"] != ""]
+    if "year" in spans:
+        spans = spans.sort_values("year", kind="stable")
     rows = []
     for (column, pkey), grp in spans.groupby(["column", "pkey"], sort=False):
-        ex = grp.iloc[len(grp) // 2]
+        grp = grp.drop_duplicates("ad_id")
+        n = len(grp)
+        picks = [n // 2] if n < MULTI_CONTEXT_MIN_COUNT else sorted({0, n // 2, n - 1})[:MAX_CONTEXTS]
         rows.append({
-            "key": f"{column}|{pkey}", "column": column, "phrase_key": pkey, "count": len(grp),
+            "key": f"{column}|{pkey}", "column": column, "phrase_key": pkey, "count": int(n),
             "surface": normalize_text(Counter(grp["phrase"]).most_common(1)[0][0]).strip(" .,;:-"),
-            "context": _snippet(ex["text"], ex["start"], ex["end"]),
+            "context": CONTEXT_SEPARATOR.join(_snippet(grp.iloc[i]["text"], grp.iloc[i]["start"], grp.iloc[i]["end"])
+                                              for i in picks),
         })
     return pd.DataFrame(rows).sort_values(["column", "phrase_key"]).reset_index(drop=True)
 
@@ -127,7 +142,8 @@ class RequirementMapper:
         self.system = system_prompt(self.vocab)
 
     def messages(self, batch: pd.DataFrame) -> list[dict]:
-        lines = [f'{n}. [{r.column}] "{r.surface}" — Kontext: {r.context}' for n, r in enumerate(batch.itertuples(), 1)]
+        lines = [f'{n}. [{r.column}] "{r.surface}" — Kontext{"e" if CONTEXT_SEPARATOR in r.context else ""}: {r.context}'
+                 for n, r in enumerate(batch.itertuples(), 1)]
         return [{"role": "system", "content": self.system},
                 {"role": "user", "content": "Ausdrücke:\n" + "\n".join(lines)}]
 

@@ -98,3 +98,20 @@ def test_pilot_sample_takes_frequent_and_random_per_column():
     s = R.pilot_sample(phrases, per_column=10)
     assert s.groupby("column").size().tolist() == [10, 10]
     assert {"c0|p0", "c0|p4"} <= set(s["key"])
+
+
+def test_frequent_phrases_get_contexts_from_different_ads_and_years():
+    rows = [(f"ad{i}", "language", f"Text {year}: der deutschen Sprache mächtig", 11, 32, year)
+            for i, year in enumerate([1860, 1870, 1880, 1890, 1900])]
+    rows.append(("ad0", "language", "Text 1860: der deutschen Sprache mächtig", 11, 32, 1860))  # same ad twice
+    rows.append(("x", "language", "nur einmal: italienisch", 12, 23, 1900))
+    spans = pd.DataFrame(rows, columns=["ad_id", "column", "text", "start", "end", "year"])
+    spans["phrase"] = [t[s:e] for t, s, e in zip(spans["text"], spans["start"], spans["end"])]
+    p = R.collect_phrases(spans).set_index("key")
+
+    frequent = p.loc["language|der deutschen sprache", "context"].split(R.CONTEXT_SEPARATOR)
+    assert p.loc["language|der deutschen sprache", "count"] == 5  # distinct ads
+    assert [re.search(r"\d{4}", c).group() for c in frequent] == ["1860", "1880", "1900"]
+    assert R.CONTEXT_SEPARATOR not in p.loc["language|italienisch", "context"]
+    msgs = R.RequirementMapper().messages(p.reset_index())
+    assert "Kontexte:" in msgs[1]["content"] and '"italienisch" — Kontext:' in msgs[1]["content"]
