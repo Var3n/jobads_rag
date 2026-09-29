@@ -130,3 +130,12 @@ def test_map_can_collect_exceptions(cfg):
 def test_leading_blank_lines_from_reasoning_mode_are_stripped(cfg):
     client = DHClient(cfg, openai_client=FakeOpenAI(lambda p: "\n\nJa, das ist eine Berufsbezeichnung."))
     assert client.chat([{"role": "user", "content": "?"}], thinking=True).content.startswith("Ja")
+
+
+def test_per_request_timeout_and_retries_are_not_part_of_cache_key(cfg):
+    fake = FakeOpenAI(lambda p: "ok")
+    client = DHClient(cfg, openai_client=fake)
+    client.chat([{"role": "user", "content": "x"}], timeout_s=1800, max_retries=0)
+    again = client.chat([{"role": "user", "content": "x"}])
+    assert again.from_cache and len(fake.chat_calls) == 1
+    assert fake.options[0]["max_retries"] == 0 and fake.options[0]["timeout"].read == 1800

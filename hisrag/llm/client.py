@@ -201,7 +201,11 @@ class DHClient:
              max_tokens: int | None = None, temperature: float | None = 0.0,
              tools: list[dict] | None = None, tool_choice: str | dict | None = None,
              response_format: dict | None = None, use_cache: bool = True,
+             timeout_s: float | None = None, max_retries: int | None = None,
              **extra: Any) -> ChatResult:
+        """One chat completion. timeout_s / max_retries override the client defaults for this
+        request only (long reasoning answers need more than the default read timeout, and a
+        timed-out request should not be restarted over and over); they are not part of the cache key."""
         payload: dict[str, Any] = {"model": model or self.model, "messages": messages}
         for k, v in (("max_tokens", max_tokens), ("temperature", temperature), ("tools", tools),
                      ("tool_choice", tool_choice), ("response_format", response_format)):
@@ -217,10 +221,20 @@ class DHClient:
             self.usage.record(self.job, "chat", payload["model"], hit.get("usage"), cache_hit=True)
             return self._to_result(hit, from_cache=True)
 
+        oa = self._oa
+        if timeout_s is not None or max_retries is not None:
+            opts: dict[str, Any] = {}
+            if timeout_s is not None:
+                from openai import Timeout
+
+                opts["timeout"] = Timeout(timeout_s, connect=self.cfg["api"].get("connect_timeout_s", 15))
+            if max_retries is not None:
+                opts["max_retries"] = max_retries
+            oa = oa.with_options(**opts)
         self.limiter.acquire()
         t0 = time.monotonic()
         try:
-            response = self._oa.chat.completions.create(**payload)
+            response = oa.chat.completions.create(**payload)
         except Exception as exc:
             self.usage.record(self.job, "chat", payload["model"], None, error=type(exc).__name__,
                               latency_s=time.monotonic() - t0)

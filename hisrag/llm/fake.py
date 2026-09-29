@@ -81,3 +81,8 @@ class FakeOpenAI:
         self.embedding_calls: list[dict] = []
         self.chat = _Chat(self)
         self.embeddings = _Embeddings(self)
+        self.options: list[dict] = []
+
+    def with_options(self, **options: Any) -> "FakeOpenAI":
+        self.options.append(options)
+        return self

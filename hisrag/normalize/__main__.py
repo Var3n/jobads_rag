@@ -53,6 +53,62 @@ def _position_inputs(cfg):
     return spans, headings
 
 
+PILOT_THINKING_FORMS = 20
+PILOT_THINKING_BATCH = 5
+
+
+def _estimate(stats: dict, n_forms: int, batch_size: int, client) -> float:
+    """Minutes for all forms: rounds of `max_workers` parallel requests, each as long as a pilot round."""
+    rounds = -(-n_forms // batch_size) / client.max_workers
+    return round(stats["seconds"] * rounds / 60, 1)
+
+
+def _pilot(cfg, client, forms, batch_size) -> dict:
+    """80 forms without reasoning (written right away), then 20 of them with reasoning.
+
+    The reasoning stage is small on purpose: at ~10 tokens/s per request it takes minutes per
+    request. If it fails or is interrupted, the no-reasoning results are already on disk.
+    """
+    import sys
+
+    from hisrag.normalize import positions as P
+
+    fmt = lambda r: "; ".join(f"{e.term} | {e.lemma} | {e.modern} | {e.gender_form} | {e.category}"
+                              for e in r.entries) if r.entries else "—"
+    out = derived_dir("pilot", cfg)
+    out.mkdir(parents=True, exist_ok=True)
+    csv = out / "positions_pilot.csv"
+    sample = P.pilot_sample(forms)
+    review = sample[["key", "surface", "count", "context"]].copy()
+
+    print(f"[1/2] {len(sample)} forms without reasoning, {batch_size} per request …", file=sys.stderr)
+    off, stats_off = P.run(client, sample, batch_size=batch_size, thinking=False)
+    review["no_reasoning"] = [fmt(off[k]) if k in off else "FAILED" for k in review["key"]]
+    review.to_csv(csv, index=False, encoding="utf-8-sig")
+    print(f"      done in {stats_off['seconds']} s → {csv}", file=sys.stderr)
+    report = {"forms_total": len(forms), "pilot_forms": len(sample), "no_reasoning": stats_off,
+              # pilot batches ran in parallel, so their wall time is about one request's duration
+              "estimated_full_run_minutes_no_reasoning": _estimate(stats_off, len(forms), batch_size, client),
+              "review_csv": str(csv)}
+
+    subset = sample.iloc[:: max(len(sample) // PILOT_THINKING_FORMS, 1)].head(PILOT_THINKING_FORMS)
+    print(f"[2/2] {len(subset)} of them with reasoning, {PILOT_THINKING_BATCH} per request "
+          "(minutes per request; Ctrl+C keeps the results above) …", file=sys.stderr)
+    try:
+        on, stats_on = P.run(client, subset, batch_size=PILOT_THINKING_BATCH, thinking=True)
+    except KeyboardInterrupt:
+        report["with_reasoning"] = "interrupted"
+    else:
+        review["with_reasoning"] = [fmt(on[k]) if k in on else "" for k in review["key"]]
+        review["differs"] = [bool(w) and w != n for n, w in zip(review["no_reasoning"], review["with_reasoning"])]
+        review.to_csv(csv, index=False, encoding="utf-8-sig")
+        report["with_reasoning"] = stats_on
+        report["agreement_on_reasoning_subset"] = P.compare_runs({k: off[k] for k in on if k in off}, on)
+        report["estimated_full_run_minutes_with_reasoning"] = _estimate(stats_on, len(forms), PILOT_THINKING_BATCH, client)
+    report["usage"] = client.usage.summary()
+    return report
+
+
 def run_positions(cfg, pilot=False, thinking=False, batch_size=25, workers=None) -> dict:
     import pyarrow as pa
     import pyarrow.parquet as pq
@@ -67,27 +123,7 @@ def run_positions(cfg, pilot=False, thinking=False, batch_size=25, workers=None)
         client.max_workers = workers
 
     if pilot:
-        sample = P.pilot_sample(forms)
-        off, stats_off = P.run(client, sample, batch_size=batch_size, thinking=False)
-        on, stats_on = P.run(client, sample, batch_size=batch_size, thinking=True)
-        fmt = lambda r: "; ".join(f"{e.term} | {e.lemma} | {e.modern} | {e.gender_form} | {e.category}"
-                                  for e in r.entries) if r.entries else "—"
-        review = sample[["key", "surface", "count", "context"]].copy()
-        review["no_reasoning"] = [fmt(off[k]) if k in off else "FAILED" for k in review["key"]]
-        review["with_reasoning"] = [fmt(on[k]) if k in on else "FAILED" for k in review["key"]]
-        review["differs"] = review["no_reasoning"] != review["with_reasoning"]
-        out = derived_dir("pilot", cfg)
-        out.mkdir(parents=True, exist_ok=True)
-        review.to_csv(out / "positions_pilot.csv", index=False, encoding="utf-8-sig")
-        usage = client.usage.summary()
-        per_form = {m: s["seconds"] / max(s["forms"], 1) for m, s in (("no_reasoning", stats_off), ("with_reasoning", stats_on))}
-        return {
-            "forms_total": len(forms), "pilot_forms": len(sample),
-            "no_reasoning": stats_off, "with_reasoning": stats_on,
-            "agreement": P.compare_runs(off, on), "usage": usage,
-            "estimated_full_run_minutes": {m: round(v * len(forms) / 60, 1) for m, v in per_form.items()},
-            "review_csv": str(out / "positions_pilot.csv"),
-        }
+        return _pilot(cfg, client, forms, batch_size)
 
     results, stats = P.run(client, forms, batch_size=batch_size, thinking=thinking)
     dictionary = P.to_dictionary(forms, results, client.model)

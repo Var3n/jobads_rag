@@ -156,10 +156,16 @@ def _messages(batch: pd.DataFrame) -> list[dict]:
             {"role": "user", "content": "Formen:\n" + "\n".join(lines)}]
 
 
+# With reasoning, one request can take far longer than the default read timeout (the API
+# generates ~10 tokens/s per request); a timed-out request must not be restarted in a loop.
+THINKING_REQUEST = {"timeout_s": 1800, "max_retries": 0}
+
+
 def normalize_batch(client: DHClient, batch: pd.DataFrame, *, thinking: bool = False) -> dict[str, FormResult]:
     """Normalize one batch; items the model skipped are retried one by one."""
+    opts = THINKING_REQUEST if thinking else {}
     result = client.chat_json(_messages(batch), BatchResult, thinking=thinking,
-                              max_tokens=16000 if thinking else 6000)
+                              max_tokens=16000 if thinking else 6000, **opts)
     by_i = {item.i: item for item in result.items if 1 <= item.i <= len(batch)}
     out = {}
     for n, key in enumerate(batch["key"], 1):
@@ -167,7 +173,7 @@ def normalize_batch(client: DHClient, batch: pd.DataFrame, *, thinking: bool = F
             out[key] = by_i[n]
         else:
             single = client.chat_json(_messages(batch.iloc[[n - 1]]), BatchResult, thinking=thinking,
-                                      max_tokens=4000)
+                                      max_tokens=8000 if thinking else 4000, **opts)
             out[key] = single.items[0] if single.items else FormResult(i=1, entries=[], confidence="low")
     return out
 
