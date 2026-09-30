@@ -241,8 +241,10 @@ class DHClient:
             raise
         raw = response.model_dump()
         self.usage.record(self.job, "chat", payload["model"], raw.get("usage"), latency_s=time.monotonic() - t0)
-        # Only cache complete answers; a cut-off answer should be retried with more max_tokens.
-        if use_cache and raw["choices"][0].get("finish_reason") != "length":
+        # Cut-off answers are cached too: re-sending the same request would not fix them (at
+        # temperature 0 it is cut off again, or answers slightly differently), it only makes runs
+        # irreproducible. A retry with more max_tokens is a different cache key anyway.
+        if use_cache:
             self.cache.set(key, raw)
         return self._to_result(raw, from_cache=False)
 
@@ -314,7 +316,8 @@ class DHClient:
                     raise StructuredOutputError(f"{schema.__name__}: {err}\n--- answer ---\n{result.content}") from err
                 msgs = msgs + [result.message, {"role": "user", "content":
                     f"Das JSON ist ungültig:\n{err}\nGib nur das korrigierte JSON zurück."}]
-                result = self.chat(msgs, **{**kwargs, "use_cache": False})
+                # Cached like any request: its key contains the (cached) broken answer, so it is stable.
+                result = self.chat(msgs, **kwargs)
         raise AssertionError("unreachable")
 
     # -------------------------------------------------------------- embeddings

@@ -38,11 +38,13 @@ def test_chat_sets_thinking_flag_and_caches(cfg):
     assert totals["requests"] == 1 and totals["cache_hits"] == 1
 
 
-def test_truncated_answers_are_not_cached(cfg):
+def test_truncated_answers_are_cached_per_max_tokens(cfg):
     fake = FakeOpenAI(lambda p: {"content": "abgeschnit", "finish_reason": "length"})
     client = DHClient(cfg, openai_client=fake)
-    client.chat([{"role": "user", "content": "x"}])
-    client.chat([{"role": "user", "content": "x"}])
+    client.chat([{"role": "user", "content": "x"}], max_tokens=100)
+    again = client.chat([{"role": "user", "content": "x"}], max_tokens=100)
+    assert len(fake.chat_calls) == 1 and again.from_cache and again.finish_reason == "length"
+    client.chat([{"role": "user", "content": "x"}], max_tokens=200)  # more tokens: a new request
     assert len(fake.chat_calls) == 2
 
 
@@ -61,6 +63,15 @@ def test_chat_json_repairs_invalid_answer_once(cfg):
     answers = iter(['{"surface": "Köchin"}', '{"surface": "Köchin", "lemma": "Köchin", "is_position": true}'])
     client = DHClient(cfg, openai_client=FakeOpenAI(lambda p: next(answers)))
     assert client.chat_json([{"role": "user", "content": "x"}], Position, mode="prompt").lemma == "Köchin"
+
+
+def test_repaired_answers_come_from_the_cache_on_rerun(cfg):
+    answers = iter(['{"surface": "Köchin"}', '{"surface": "Köchin", "lemma": "Köchin", "is_position": true}'])
+    fake = FakeOpenAI(lambda p: next(answers))
+    for _ in range(2):  # a second client on the same cache, as in a re-run of a step
+        client = DHClient(cfg, openai_client=fake)
+        assert client.chat_json([{"role": "user", "content": "x"}], Position, mode="prompt").lemma == "Köchin"
+    assert len(fake.chat_calls) == 2
 
 
 def test_chat_json_gives_up_after_repairs(cfg):

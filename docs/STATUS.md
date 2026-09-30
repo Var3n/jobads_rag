@@ -26,7 +26,9 @@ Consequences of the scale (120 requests/min, ~10 tokens/s per request):
 * Repo: github.com/Var3n/jobads_rag. Pull on the cluster with `git pull`; `nbstripout --install` keeps notebook
   outputs out of git.
 * All LLM responses are cached on the cluster (`data/cache/llm_cache.sqlite`, keyed by the full request), so re-running a
-  step after a code change only sends requests whose prompt changed.
+  step after a code change only sends requests whose prompt changed. Cut-off answers and JSON repairs are cached as
+  well (since 2026-09-30; before, 3–4 mapping requests were re-sent on every run and gave slightly different tags), so a
+  re-run reproduces the tables exactly.
 * Models (DHinfra slugs): `qwen3.5-397b` (chat, tools, vision, 256k context, JSON-schema output works), embeddings
   `bge-m3`, `qwen3-embedding-8b`, `jina-embeddings-v3-query/passage`, `jina-embeddings-v4-text-retrieval`,
   `embeddinggemma-300m`. **No rerank model** (Qwen can rerank if needed).
