@@ -90,6 +90,48 @@ def test_full_mapping_to_dictionary_and_ad_rows(cfg):
     assert report["values_outside_closed_lists"] == {"religion: steirisch": 1}
 
 
+def test_tags_not_in_the_phrase_are_checked_without_context(cfg):
+    answers = {"verheirathet": [{"dimension": "familienstand", "value": "verheiratet"},
+                                {"dimension": "kinder", "value": "kinderlos"}],      # from an example ad
+               "absolvirter": [{"dimension": "bildung", "value": "Bergschule"}],     # likewise
+               "in besten jahren": [{"dimension": "alter", "value": "mittleres Alter"}]}  # fair paraphrase
+    rejected = {("verheirathet", "kinderlos"), ("absolvirter", "Bergschule")}
+
+    def fake(payload):
+        user = payload["messages"][-1]["content"]
+        if user.startswith("Tags:"):
+            assert "Kontext" not in user
+            found = re.findall(r'^(\d+)\. "(.*?)" → \w+ = (.*)$', user, re.M)
+            return json.dumps({"items": [{"i": int(i), "stated": (s, v) not in rejected} for i, s, v in found]})
+        found = re.findall(r'^(\d+)\. \[\w+\] "(.*?)" — Kontext', user, re.M)
+        return json.dumps({"items": [{"i": int(i), "tags": answers[s.lower()]} for i, s in found]})
+
+    rows = [("a", "verheirathet, kinderlos", 0, 12), ("b", "absolvirter Bergschüler", 0, 11),
+            ("c", "Mann in besten Jahren", 5, 21)]
+    spans = pd.DataFrame(rows, columns=["ad_id", "text", "start", "end"]).assign(column="background",
+                                                                               newspaper="wrz", year=1880)
+    spans["phrase"] = [t[s:e] for t, s, e in zip(spans["text"], spans["start"], spans["end"])]
+    client = DHClient(cfg, openai_client=FakeOpenAI(fake))
+    mapper = R.RequirementMapper()
+    phrases = R.collect_phrases(spans)
+    results, _ = mapper.run(client, phrases, progress=False)
+    d = mapper.to_dictionary(phrases, results, "qwen")
+
+    candidates = R.verification_candidates(d)
+    assert sorted(candidates["value"]) == ["Bergschule", "kinderlos", "mittleres Alter"]  # "verheiratet" is in the phrase
+    checked, stats = R.TagVerifier(mapper.vocab).run(client, candidates, progress=False)
+    assert stats["failed_batches"] == []
+    d = R.apply_verification(d, checked).set_index("key")
+
+    verified = {t["value"]: t["verified"] for t in d.loc["background|verheirathet", "tags"]}
+    assert verified == {"verheiratet": None, "kinderlos": False}
+    assert not d.loc["background|absolvirter", "is_informative"]
+    ad = R.ad_requirements(spans, d.reset_index())
+    assert sorted(ad["value"]) == ["mittleres Alter", "verheiratet"]
+    report = R.summarize(d.reset_index(), ad)
+    assert report["tags_checked_without_context"] == 3 and report["tags_rejected_by_check"] == 2
+
+
 def test_pilot_sample_takes_frequent_and_random_per_column():
     phrases = pd.DataFrame({"key": [f"c{c}|p{i}" for c in range(2) for i in range(30)],
                             "column": [f"c{c}" for c in range(2) for _ in range(30)],

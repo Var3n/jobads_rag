@@ -88,16 +88,17 @@ values outside closed lists are marked `in_vocab = false` (~0.2 %, left as they 
 
 ## Open items (in order)
 
-1. **Value leaks from the context (step 5).** Audit of 50 dropped details (2026-09-30): ~27 were rightly dropped
-   (context: "bevorzugt", "Hauptfach", "Klavier"), ~11 were in the phrase in historical spelling, ~12 were paraphrases.
-   `detail_is_grounded` now folds historical spellings (c/k/z, th, umlauts, accents) and accepts cue words
-   (`DETAIL_CUES`: möglichst → bevorzugt, absolvirt → abgeschlossen); this recovers 6 of the 11 without keeping any
-   context detail. The bigger finding: in ~12 of the 50 rows the **value itself** came from the context (`"ger"` →
-   Buchführung/Kaution, 10 mentions; `"Deutsch und Französisch"` → Latein; `"également familières"` → Italienisch).
-   `value_is_grounded` flags these but also ~7 fair paraphrases (Ortskenntnis, Maturazeugnis), so it does not drop
-   anything yet. Next: re-run `python -m hisrag.normalize requirements` on the cluster (cache, minutes), read the new
-   section "Values that do not occur in the phrase" in `notebooks/03_requirements_review.ipynb`, then decide the rule
-   (e.g. drop tags of short fragments, or where value and detail are both ungrounded) or a prompt change.
+1. **Value leaks from the context (step 5).** The mapping sometimes tags what an example ad says, not the phrase:
+   `"verheirathet"` → kinderlos (340 mentions), `"gebildetes"` → weiblich, `"absolvirter"` → Bergschule/Techniker/Wundarzt,
+   `"guter"` → Schießen/Musik. A value-in-phrase flag alone cannot separate these from fair paraphrases (29 % of tag
+   mentions are flagged, mostly like "gehörig instruierten" → vorschriftsmäßiges Gesuch). So the flagged tags (~9,000
+   distinct phrase–tag pairs, ~150 requests) are checked again by the model with **only the phrase** (`TagVerifier`,
+   `verified` in the tag struct; rejected tags give no ad rows). Next on the cluster:
+   `python -m hisrag.normalize requirements --verify-pilot` → review `requirements_verify_pilot.csv` (120 tags, top 60 by
+   mentions + 60 random); if good, the full run, then the section "Tags checked without context" in notebook 03.
+   Detail check (done): spelling folding and cue words cut the drops from 2,797 to 2,459; the remaining drops are right
+   ("Hauptfach"/"Nebenfach" 1,814 mentions, "in Wort und Schrift", "bevorzugt" come from the ad, not the phrase). If
+   Hauptfach/Nebenfach is needed, it has to come from a per-ad rule on the text, not the phrase dictionary.
 2. **Step 6: salary.** Columns `salary`, `salary_period`, `unspecific_salary`, `verpflegung`, `salary_importance`
    (spans like `"von 10 fl CM"`, `"Monats⸗lohn"`, `"Quartiergeld"`, `"Wohnung, ganzer Verköstigung"`). Currency depends
    on date (Gulden CM until 1858, ö.W. after, Kronen from 1892/1900, Schilling 1925, Reichsmark 1938–45, Schilling

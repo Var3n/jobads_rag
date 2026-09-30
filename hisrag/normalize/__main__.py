@@ -9,7 +9,8 @@
   requirements [--pilot] [--batch-size N] [--workers N]
           step 5: requirement tags via the LLM, vocabulary from vocab/requirements.yaml →
           derived/requirement_dict, derived/ad_requirements. --pilot maps 20 phrases per column
-          and writes a review CSV instead.
+          and writes a review CSV instead. Tags whose value is not in the phrase are then checked
+          again without context; --verify-pilot checks 120 of them and writes a review CSV instead.
 """
 
 import argparse
@@ -167,9 +168,13 @@ def _requirement_spans(cfg):
     return query(selects, cfg=cfg)
 
 
-def run_requirements(cfg, pilot=False, batch_size=40, workers=None) -> dict:
+VERIFY_PILOT_TAGS = 120
+
+
+def run_requirements(cfg, pilot=False, verify_pilot=False, batch_size=40, workers=None) -> dict:
     import sys
 
+    import pandas as pd
     import pyarrow as pa
     import pyarrow.parquet as pq
 
@@ -202,13 +207,35 @@ def run_requirements(cfg, pilot=False, batch_size=40, workers=None) -> dict:
 
     results, stats = mapper.run(client, phrases, batch_size=batch_size)
     dictionary = mapper.to_dictionary(phrases, results, client.model)
+    candidates = R.verification_candidates(dictionary)
+    verifier = R.TagVerifier(mapper.vocab)
+
+    if verify_pilot:
+        top = candidates.nlargest(VERIFY_PILOT_TAGS // 2, "count")
+        rest = candidates.drop(top.index)
+        sample = pd.concat([top, rest.sample(min(VERIFY_PILOT_TAGS - len(top), len(rest)), random_state=0)])
+        print(f"{len(sample)} of {len(candidates)} tags to check …", file=sys.stderr)
+        checked, vstats = verifier.run(client, sample)
+        review = sample.drop(columns="key").assign(
+            stated=[checked[k].stated if k in checked else "FAILED" for k in sample["key"]])
+        out = derived_dir("pilot", cfg)
+        out.mkdir(parents=True, exist_ok=True)
+        review.to_csv(out / "requirements_verify_pilot.csv", index=False, encoding="utf-8-sig")
+        return {**base, "tags_to_check": len(candidates), "pilot": vstats,
+                "rejected_in_pilot": int((review["stated"] == False).sum()),  # noqa: E712
+                "review_csv": str(out / "requirements_verify_pilot.csv"),
+                "estimated_full_check_minutes": _estimate(vstats, len(candidates), R.VERIFY_BATCH_SIZE, client),
+                "usage": client.usage.summary()}
+
+    checked, vstats = verifier.run(client, candidates)
+    dictionary = R.apply_verification(dictionary, checked)
     d_out = derived_dir("requirement_dict", cfg)
     d_out.mkdir(parents=True, exist_ok=True)
     pq.write_table(pa.Table.from_pandas(dictionary, schema=R.DICT_SCHEMA, preserve_index=False),
                    d_out / "part-0.parquet")
     ad_req = R.ad_requirements(spans, dictionary)
     write_partitioned(ad_req, derived_dir("ad_requirements", cfg), R.AD_REQUIREMENTS_SCHEMA)
-    return {**base, **stats, **R.summarize(dictionary, ad_req),
+    return {**base, **stats, "verification": vstats, **R.summarize(dictionary, ad_req),
             "details_dropped_as_ungrounded": mapper.details_dropped, "usage": client.usage.summary()}
 
 
@@ -219,6 +246,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Normalization steps")
     parser.add_argument("step", choices=STEPS)
     parser.add_argument("--pilot", action="store_true", help="positions: pilot run with review CSV")
+    parser.add_argument("--verify-pilot", action="store_true",
+                        help="requirements: check a sample of tags without context, write a review CSV")
     parser.add_argument("--thinking", action="store_true", help="positions: enable reasoning")
     parser.add_argument("--batch-size", type=int, default=None,
                         help="forms per request (positions: 25, requirements: 40)")
@@ -229,7 +258,8 @@ def main() -> None:
         report = run_positions(cfg, pilot=args.pilot, thinking=args.thinking,
                                batch_size=args.batch_size or 25, workers=args.workers)
     elif args.step == "requirements":
-        report = run_requirements(cfg, pilot=args.pilot, batch_size=args.batch_size or 40, workers=args.workers)
+        report = run_requirements(cfg, pilot=args.pilot, verify_pilot=args.verify_pilot,
+                                  batch_size=args.batch_size or 40, workers=args.workers)
     else:
         report = STEPS[args.step](cfg)
     print(json.dumps(report, ensure_ascii=False, indent=1, default=str))
