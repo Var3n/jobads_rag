@@ -234,11 +234,12 @@ VERIFY_BATCH_SIZE = 60
 
 
 def verify_system_prompt(vocab: Vocabulary) -> str:
-    dims = "\n".join(f"- {name}: {spec['description']}" for name, spec in vocab.dimensions.items())
+    # The full vocabulary section, with its examples, so the check knows the mapping's conventions
+    # ("gehörig documentirten" → belegtes Gesuch, "Maturitätsprüfung" → Matura).
     return f"""Du prüfst Tags, die Ausdrücken aus historischen Stellenanzeigen der Wiener Zeitung (1850–1950) zugeordnet wurden.
 Ein Ausdruck kommt in vielen Anzeigen vor; ein Tag darf nur sagen, was der Ausdruck selbst aussagt, in jeder dieser Anzeigen. Du siehst deshalb nur den Ausdruck, keinen Kontext.
 
-Für jeden Tag: stated = true, wenn der Ausdruck selbst diese Information enthält. Alte Schreibung, OCR-Fehler, Abkürzungen, andere Sprachen und moderne Umschreibungen im Wert sind in Ordnung:
+Für jeden Tag: stated = true, wenn der Ausdruck selbst diese Information enthält. Alte Schreibung, OCR-Fehler, Abkürzungen, andere Sprachen, historische Bezeichnungen und moderne Umschreibungen im Wert sind in Ordnung, ebenso die Werte und Beispiele des Vokabulars unten:
 - "gehörig instruierten" → bewerbungsformalitaeten = vorschriftsmäßiges Gesuch: true
 - "in besten Jahren" → alter = mittleres Alter: true
 - "Franzose" → herkunft = Frankreich: true
@@ -246,10 +247,10 @@ stated = false, wenn der Tag mehr oder anderes sagt als der Ausdruck, also aus e
 - "verheiratet" → kinder = kinderlos: false (nur familienstand = verheiratet stünde im Ausdruck)
 - "absolvirter" → bildung = Bergschule: false (welche Schule, sagt der Ausdruck nicht)
 - "Deutsch und" → unterrichtsfach = Englisch: false
+Namen im Wert (Orte, Sprachen, Fächer, Schulen, Berufe, Waren) müssen im Ausdruck stehen, auch in alter Schreibung oder als Übersetzung; aus einem Wortbruchstück oder einer allgemeinen Angabe erratene Namen sind false.
 Bei verstümmelten Ausdrücken zählt nur, was eindeutig erkennbar ist. Im Zweifel false.
 
-Dimensionen:
-{dims}
+Dimensionen:{vocab.prompt_section()}
 
 Antworte mit einem JSON-Objekt {{"items": [...]}} mit genau einem Element pro Tag, "i" = Nummer des Tags."""
 
