@@ -1,6 +1,6 @@
 # Project status (proof of concept)
 
-Last updated: 2026-09-30, step 5 done. Read this first when picking the project up; `README.md` has setup and commands.
+Last updated: 2026-09-30, step 6 done. Read this first when picking the project up; `README.md` has setup and commands.
 
 ## Goal and constraints
 
@@ -43,8 +43,8 @@ Consequences of the scale (120 requests/min, ~10 tokens/s per request):
 | 3 | Repeated printings | done | `ad_dups`: 44,291 distinct ads; `is_canonical` marks one printing per ad |
 | 4 | Position dictionary (LLM) | done | `position_dict` (6,090 forms, 4,402 positions), `ad_positions` (26,347 mentions, 21,173 ads) |
 | 5 | Requirement tags (LLM) | done | `requirement_dict` (22,494 phrases), `ad_requirements` (66,632 tag mentions, 23,037 ads) |
-| 6 | Salary parsing | built, **cluster run next** | `ad_salary` (one row per amount), `ad_pay` (main pay, benefits per ad); rules read 96 %, LLM ~500 forms |
-| 7 | Final clean table + sanity plots | open | one joined view, plots per decade |
+| 6 | Salary parsing | done | `ad_salary` (22,639 spans: 21,667 by rules, 289 by LLM), `ad_pay` (9,722 ads with main pay, benefits per ad) |
+| 7 | Final clean table + sanity plots | **next** | one joined view, plots per decade |
 | 8 | Embedding comparison | open | synthetic known-item queries (Qwen writes a query for a known ad), recall@k, keyword vs. vector vs. hybrid |
 | 9 | Index | open | LanceDB with vectors, keyword index and filter columns |
 | 10 | Agent tools | open | `search_ads`, `get_ad`, `aggregate` (SQL templates), `expand_concept` |
@@ -98,10 +98,12 @@ the model with only the phrase (`verified`); 3,203 were rejected (7,447 mentions
 
 **Salary (step 6).** The `salary` spans (22,646 in 10,940 ads, 95 % in job offers, almost all 1850s–1910s; only 64
 after 1920) hold bare amounts ("600 fl.", "1200 K"); what an amount pays for, its period and the Gulden standard are
-in the text around it, so rules read a window of ±60–80 characters. Locally the rules read 96 % of the spans, ~450 are
-numbers that are no money (bread rations in Gramm, allowances in "pCt.", teaching hours), ~500 go to the LLM.
-Decisions: amounts stay **nominal** (no CM → ö.W. conversion, user's decision); Gulden get CM/ö.W. as stated, else by
-date (CM until October 1858; the stated standards confirm the rule: 1 stated CM after 1858); Kreuzer count 1/100 fl. in
+in the text around it, so rules read a window of ±60–80 characters. Full run: rules read 21,667 spans (96 %), ~490 are
+numbers that are no money (bread rations in Gramm, allowances in "pCt.", teaching hours) or fragments, 458 distinct
+leftovers went to the LLM (289 amounts read, 197 spans unreadable or no amount). LLM prompt: the year is given with
+each excerpt, "kr." is always Kreuzer, no guessed currency. Decisions: amounts stay **nominal** (no CM → ö.W.
+conversion, user's decision); Gulden get CM/ö.W. as stated, else by date (CM until October 1858; of 1,989 amounts that
+state their standard, 1,987 match the date rule, so the rule is safe for the ~13,300 others); Kreuzer count 1/100 fl. in
 ö.W. and 1/60 in CM; Heller 1/100 K. `component` from the nearest keyword (the word right after the amount wins,
 "42 fl. Quartiergeld"; lists of amounts take the keyword at their end); period stated or **assumed yearly** for
 Gehalt, Zulage, Quartiergeld, Remuneration, Pension (flag `period_source`). Main pay per ad (`ad_pay`) =
@@ -112,10 +114,9 @@ Known limits: keywords farther than the window (Quartiergeld categories, long po
 
 ## Open items (in order)
 
-1. **Step 6: salary, built and tested locally, not yet run on the cluster.** `hisrag/normalize/salary.py`. Next:
-   `python -m hisrag.normalize salary --pilot` → review `salary_pilot.csv`, then the full run and
-   `notebooks/04_salary_review.ipynb`.
-2. Steps 7 onward as in the table.
+1. **Step 7: final clean table + sanity plots.** One joined view over steps 1–6 (ad, text flags, canonical printing,
+   positions, requirements, pay) and plots per decade to catch gaps before indexing.
+2. Steps 8 onward as in the table.
 
 Smaller known issues: one hallucinated company name from context in step 5; single-occurrence OCR garbles in step 4
 ("Applent", "Praschneiderin") are mapped with guesses; the generic "Lehrling" category depends on its example.
