@@ -35,10 +35,16 @@ def cfg(tmp_path):
     ("1.200 fl. jährlich", D1870, (1200, 1200, "fl", "öW", "date")),
     ("2 K 20 h ist bei dem", D1870, (2.2, 2.2, "K", None, None)),
     ("50, resp. 40 fl., oder falls", D1870, (50, 50, "fl", "öW", "date")),              # list sharing its currency
+    ("70 bis 80 kr. und bei Wächtern", D1870, (0.7, 0.8, "fl", "öW", "date")),           # Kreuzer range
+    ("50 fl. EM. monatlich Gehalt", D1855, (50, 50, "fl", "CM", "stated")),              # OCR of "CM."
 ])
 def test_parse_amount(text, date, expected):
     a = S.parse_amount(text, date)
     assert (a.amount_min, a.amount_max, a.currency, a.standard, a.standard_source) == pytest.approx(expected)
+
+
+def test_large_heller_amount_is_left_to_the_llm():
+    assert S.parse_amount("400 h , für Unter-Aspang jährlicher 300 K", D1870) is None  # OCR for "400 K"
 
 
 def test_currency_written_before_the_span():
@@ -67,6 +73,8 @@ def test_numbers_that_are_no_money(text, not_money):
     ("Assistenten mit jährlichen 500 fl., 450 fl.,", " und 300 fl. Gehalt erledigt", "350 fl.", ("gehalt", "jahr", "stated")),
     ("Jahresgehalt der II. Kategorie", " , Funktionszulage jährlicher 200 K", "1800 K", ("gehalt", "jahr", "stated")),
     ("mit einem Honorar monatlicher", " , die Naturalverpflegung", "100 K", ("remuneration", "monat", "stated")),
+    ("1800 K, Quatiergeld der dritten Kategorie jährlicher", " Ferner", "300 K.", ("quartiergeld", "jahr", "stated")),
+    ("beide mit", " EM. monatlich Gehalt.", "50 fl.", ("gehalt", "monat", "stated")),
 ])
 def test_classify(before, after, span, expected):
     assert S.classify(before, after, span) == expected

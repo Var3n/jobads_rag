@@ -42,7 +42,7 @@ _CURRENCY = [  # (regex on lower-case text, code); order matters: "kr." before "
 _SUBUNIT = r"kr\b\.?|kreuzer|h\b\.?|heller|gr\b\.?|groschen|pf\b\.?|rpf\b\.?"
 _CUR_RE = "|".join(f"(?:{rx})" for rx, _ in _CURRENCY)
 _OEW = r"ö\.?\s*w|öst\w*\.?\s*w|oe\.?\s*w|[56]\.\s*w\b|österr\w*\.?\s*währ"
-_CM = r"c\.\s*m\b|cm\b|conv\w*\.?\s*m|conventionsm"
+_CM = r"[ce]\.\s*m\b|[ce]m\b|conv\w*\.?\s*m|conventionsm"  # "EM." is OCR for "CM."
 # a number followed by one of these is no amount of money: a bread ration, a share of the salary, hours
 NOT_MONEY = (r"g\b|gramm|dekagramm|decagramm|dkg|kg|kilo|pfd|pfund|liter|hectol|hektol|raummeter|klafter|metzen|joch|"
              r"prozent|procent|perc|pct|p\.\s*ct|%|stunden|std\b|tage\b|wochen\b|monate\b|jahre\b|classe|klasse")
@@ -110,12 +110,16 @@ def parse_amount(text: str, date: dt.date | None, before: str = "") -> Amount | 
         c = re.match(rf"\s*({_CUR_RE})", rest)
         if c:
             cur, rest = _currency_code(c.group(1)), rest[c.end():]
-        elif (k := re.match(rf"\s*({_SUBUNIT})", rest)) and not hi:
-            # Kreuzer or Heller alone: "Taggeld 78½ kr." → 0.785 fl.
+        elif k := re.match(rf"\s*({_SUBUNIT})", rest):
+            # Kreuzer or Heller alone: "Taggeld 78½ kr." → 0.785 fl., "70 bis 80 kr." → 0.70–0.80 fl.
+            # 100 or more would have been written in Gulden/Kronen: OCR for "K" ("400 h"), left to the LLM
+            if _number(hi or lo) >= 100:
+                return None
             cur = "K" if k.group(1).startswith("h") else "fl"
             standard, source = _standard(rest[k.end():], date) if cur == "fl" else (None, None)
-            value = _number(lo) / (60 if standard == "CM" else 100)
-            return Amount(amount_min=value, amount_max=value, currency=cur, standard=standard, standard_source=source)
+            per = 60 if standard == "CM" else 100
+            return Amount(amount_min=_number(lo) / per, amount_max=_number(hi or lo) / per, currency=cur,
+                          standard=standard, standard_source=source)
         else:  # a list sharing its currency ("50, resp. 40 fl.", "500 fl., 450 fl."), or written before the span
             c = re.search(rf"\d\s*({_CUR_RE})", rest[:25])
             b = re.search(rf"(?:^|[\s(])({_CUR_RE})\s*$", normalize_text(before).lower())
@@ -134,7 +138,8 @@ def parse_amount(text: str, date: dt.date | None, before: str = "") -> Amount | 
 
 COMPONENTS = [  # (name, regex on lower-case normalized text)
     ("kaution", r"[ck]aution|erlag|sicherstellung"),
-    ("quartiergeld", r"quartiergeld|wohnungsgeld|quartierbeitrag|zinsbeitrag|möbelzins|mietzins"),
+    # also OCR variants: Quatiergeld, Ouartiergeld, Quart-ergeld
+    ("quartiergeld", r"[qo]uar?t[\w-]{0,2}ergeld|wohnungsgeld|quartierbeitrag|zinsbeitrag|möbelzins|mietzins"),
     ("zulage", r"zulage|adjut|triennal|quinquennal|pauschal|subvention|relutum|livreegeld|kostgeld"),
     ("taggeld", r"taggeld|diurn|diäten(?!\s*-?\s*[ck]lass)"),   # Diätenclasse is a rank
     ("pension", r"pension|ruhegenu|ruhegehalt|provision\w* für witwen"),
@@ -154,7 +159,7 @@ ANNUAL_BY_DEFAULT = ("gehalt", "zulage", "quartiergeld", "pension", "remuneratio
 # directly after the amount (currency, subunit, standard, "jährlich" may stand in between; no comma:
 # "Gehalt [1050 fl.], Quartiergeld" lists the next item)
 _AFTER_PREFIX = (rf"^[\s.]{{0,3}}(?:(?:{_CUR_RE})[\s.]*)?(?:\d+\s*(?:{_SUBUNIT})[\s.]*)?(?:(?:{_OEW}|{_CM})[\s.]*)?"
-                 r"(?:jährl\w*[\s.]*)?")
+                 r"(?:(?:jährl|monatl|wöchentl|täglich)\w*[\s.]*)?")
 
 
 # what may stand between the amount and a keyword further on in a list: "[500 fl.], 450 fl. und 400 fl. Gehalt"
@@ -250,7 +255,7 @@ class SalaryItem(BaseModel):
     is_amount: bool = Field(description="false, wenn der markierte Ausdruck keinen Geldbetrag nennt")
     amount_min: float | None = None
     amount_max: float | None = None
-    currency: Literal["fl", "K", "S", "RM", "M", "Fr"] | None = None
+    currency: Literal["fl", "K", "S", "RM", "M", "Tlr", "Fr"] | None = None
 
 
 class SalaryBatch(BaseModel):
@@ -258,23 +263,27 @@ class SalaryBatch(BaseModel):
 
 
 SYSTEM_PROMPT = """Du liest Geldbeträge aus historischen Stellenanzeigen der Wiener Zeitung (1850–1950).
-In jedem Ausschnitt ist ein Ausdruck in [eckigen Klammern] markiert. Gib für ihn an:
-- is_amount: nennt der markierte Ausdruck (zusammen mit dem direkt folgenden Text) einen Geldbetrag? "zwölf Stunden" → false.
-- amount_min, amount_max: der Betrag als Zahl; bei einer Spanne ("von eintausend bis zweitausend Gulden") Minimum und Maximum, sonst zweimal derselbe Wert. Kreuzer/Heller als Dezimalstellen ("zwei Gulden fünfzig Kreuzer" → 2.5).
-- currency: fl (Gulden), K (Kronen), S (Schilling), RM (Reichsmark), M (Mark), Fr (Franken/Francs); null, wenn nicht erkennbar.
-Nur der markierte Betrag zählt, nicht andere Beträge im Ausschnitt. Erfinde nichts: ist der Betrag nicht lesbar, is_amount = false.
+In jedem Ausschnitt ist ein Ausdruck in [eckigen Klammern] markiert; davor steht das Jahr der Anzeige. Gib für den markierten Ausdruck an:
+- is_amount: nennt der markierte Ausdruck (zusammen mit dem direkt folgenden Text) einen Geldbetrag? "zwölf Stunden", "10 Wiener Klafter" → false.
+- amount_min, amount_max: der Betrag als Zahl; bei einer Spanne ("von eintausend bis zweitausend Gulden") Minimum und Maximum, sonst zweimal derselbe Wert.
+- currency: fl (Gulden, auch "fl.", "f."), K (Kronen), S (Schilling), RM (Reichsmark), M (Mark), Tlr (Taler), Fr (Franken/Francs).
+Regeln:
+- "kr." heißt Kreuzer, nie Kronen: Kreuzer werden in Gulden umgerechnet (100 kr. = 1 fl.; "70 bis 80 kr." → 0.7 bis 0.8 fl.; "zwei Gulden fünfzig Kreuzer" → 2.5 fl.). Heller ebenso in Kronen (100 h = 1 K).
+- Kronen gibt es erst ab 1892. Verstümmelte Währungszeichen nach einer Zahl ("1200 b", "900 E", "2200 Kk", "3600 Kč") sind ab 1892 Kronen, vorher Gulden.
+- Steht beim markierten Betrag keine Währung, nimm die Währung, in der die Beträge direkt daneben angegeben sind; gibt es keine, currency = null. Nicht raten.
+- Nur der markierte Betrag zählt, nicht andere Beträge im Ausschnitt. Erfinde nichts: ist der Betrag nicht lesbar, is_amount = false.
 Antworte mit einem JSON-Objekt {"items": [...]} mit genau einem Element pro Ausschnitt, "i" = Nummer des Ausschnitts."""
 
 
 def leftovers(rows: pd.DataFrame) -> pd.DataFrame:
-    """Distinct snippets the rules could not read; key = snippet."""
+    """Distinct snippets the rules could not read; key = snippet, with the year of its first occurrence."""
     left = rows[rows["parsed_by"].isna()]
-    return (left.groupby("snippet").agg(count=("ad_id", "size")).reset_index()
+    return (left.groupby("snippet").agg(count=("ad_id", "size"), year=("year", "min")).reset_index()
                 .rename(columns={"snippet": "key"}).sort_values("key").reset_index(drop=True))
 
 
 def _messages(batch: pd.DataFrame) -> list[dict]:
-    lines = [f"{n}. {k}" for n, k in enumerate(batch["key"], 1)]
+    lines = [f"{n}. ({y}) {k}" for n, (y, k) in enumerate(zip(batch["year"], batch["key"]), 1)]
     return [{"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": "Ausschnitte:\n" + "\n".join(lines)}]
 
@@ -316,7 +325,7 @@ BENEFITS = [
     ("heizung", r"heizung|beheizung|holz|brennmaterial|kohle"),
     ("licht", r"beleuchtung|licht|kerzen"),
     ("deputat", r"deputat|naturalbez|naturalien|getreide|korn"),
-    ("quartiergeld", r"quartiergeld|wohnungsgeld|zinsbeitrag"),
+    ("quartiergeld", r"[qo]uar?t[\w-]{0,2}ergeld|wohnungsgeld|zinsbeitrag"),
     ("zulagen", r"zulage|adjut|pauschal"),
 ]
 
