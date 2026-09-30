@@ -1,6 +1,6 @@
 # Project status (proof of concept)
 
-Last updated: 2026-09-30, step 6 done. Read this first when picking the project up; `README.md` has setup and commands.
+Last updated: 2026-09-30, step 7 done. Read this first when picking the project up; `README.md` has setup and commands.
 
 ## Goal and constraints
 
@@ -44,8 +44,8 @@ Consequences of the scale (120 requests/min, ~10 tokens/s per request):
 | 4 | Position dictionary (LLM) | done | `position_dict` (6,090 forms, 4,402 positions), `ad_positions` (26,347 mentions, 21,173 ads) |
 | 5 | Requirement tags (LLM) | done | `requirement_dict` (22,494 phrases), `ad_requirements` (66,632 tag mentions, 23,037 ads) |
 | 6 | Salary parsing | done | `ad_salary` (22,639 spans: 21,667 by rules, 289 by LLM), `ad_pay` (9,722 ads with main pay, benefits per ad) |
-| 7 | Final clean table + sanity plots | built, **cluster run next** | one joined view, plots per decade |
-| 8 | Embedding comparison | open | synthetic known-item queries (Qwen writes a query for a known ad), recall@k, keyword vs. vector vs. hybrid |
+| 7 | Final clean table + sanity plots | done | `ad_clean`: 41,024 countable ads; `notebooks/05_clean_table.ipynb` |
+| 8 | Embedding comparison | **next** | synthetic known-item queries (Qwen writes a query for a known ad), recall@k, keyword vs. vector vs. hybrid |
 | 9 | Index | open | LanceDB with vectors, keyword index and filter columns |
 | 10 | Agent tools | open | `search_ads`, `get_ad`, `aggregate` (SQL templates), `expand_concept` |
 | 11 | Agent loop | open | Qwen tool calling (tested in step 0), cites ad IDs, always reports how many ads an answer rests on |
@@ -114,14 +114,15 @@ Known limits: keywords farther than the window (Quartiergeld categories, long po
 
 ## Open items (in order)
 
-1. **Step 7: clean table, built and tested locally.** `hisrag/normalize/clean.py` → `ad_clean` (one row per ad,
-   `searchable` / `countable`), `notebooks/05_clean_table.ipynb` (plots per decade; matplotlib added as a dependency,
-   so `pip install -e .` on the cluster once). Next: `python -m hisrag.normalize clean`, then review the notebook.
-   Findings from the real steps 1–3 and 6 already: 41,023 countable ads of 52,823 regions; the 1920s (271) and 1930s
-   (17) are nearly empty, so the corpus is effectively 1850–1918 plus 1940s; the 1850s are half job searches, from the
-   1870s on 83–89 % job offers; pay is stated in 67 % of job offers in the 1860s, falling to ~15 % by 1900 and ~0 after
-   1920; the death register sits in the 1870s–1880s.
-2. Steps 8 onward as in the table.
+1. **Step 8: embedding comparison.** Not started; see the table.
+2. Steps 9 onward as in the table.
+
+**Clean table (step 7).** `ad_clean`: 52,823 regions, 49,817 searchable, 41,024 countable (30,670 job offers, 5,896
+job searches, 3,205 service offers, 1,253 agency ads). Of the countable ads 40.7 % have a position, 42.6 % requirement
+tags, 21.2 % a main pay. The 1920s (271 countable) and 1930s (17) are nearly empty, so the corpus is effectively
+1850–1918 plus the 1940s; answers about the interwar years must say so. The 1850s are half job searches, from the 1870s
+on 83–89 % job offers; pay is stated in 67 % of job offers in the 1860s, ~15 % by 1900, ~0 after 1920; the death
+register sits in the 1870s–1880s. `notebooks/05_clean_table.ipynb` draws points resting on < 200 ads hollow.
 
 Smaller known issues: one hallucinated company name from context in step 5; single-occurrence OCR garbles in step 4
 ("Applent", "Praschneiderin") are mapped with guesses; the generic "Lehrling" category depends on its example.
