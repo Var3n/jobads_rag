@@ -1,6 +1,6 @@
 # Project status (proof of concept)
 
-Last updated: 2026-09-30, step 5 audit. Read this first when picking the project up; `README.md` has setup and commands.
+Last updated: 2026-09-30, step 5 done. Read this first when picking the project up; `README.md` has setup and commands.
 
 ## Goal and constraints
 
@@ -42,7 +42,7 @@ Consequences of the scale (120 requests/min, ~10 tokens/s per request):
 | 2 | Text normalization + quality flags | done | `ad_text`: `text_norm`, language (de/it/fr), flags below |
 | 3 | Repeated printings | done | `ad_dups`: 44,291 distinct ads; `is_canonical` marks one printing per ad |
 | 4 | Position dictionary (LLM) | done | `position_dict` (6,090 forms, 4,402 positions), `ad_positions` (26,347 mentions, 21,173 ads) |
-| 5 | Requirement tags (LLM) | done, audit open | `requirement_dict` (22,494 phrases), `ad_requirements` (66,632 tag mentions, 23,037 ads) |
+| 5 | Requirement tags (LLM) | done | `requirement_dict` (22,494 phrases), `ad_requirements` (66,632 tag mentions, 23,037 ads) |
 | 6 | Salary parsing | **next** | amount, currency (fl. CM/ö.W., Kronen, Schilling, RM), period; rules first, LLM for leftovers |
 | 7 | Final clean table + sanity plots | open | one joined view, plots per decade |
 | 8 | Embedding comparison | open | synthetic known-item queries (Qwen writes a query for a known ad), recall@k, keyword vs. vector vs. hybrid |
@@ -85,27 +85,24 @@ values otherwise. Application formalities and a school's language of instruction
 the person. **Language names stay as the source names them** (Böhmisch, Walachisch, Ruthenisch), only spelling is
 unified; this was the user's decision. Skill values stay free for now; the project's economist will give feedback on
 the vocabulary. Editing the YAML changes the prompt version, so the next run re-maps all phrases (~1 h 50 min).
-Post-model checks: a `detail` is kept only if its words occur in the phrase (`detail_raw` keeps the model's version);
-values outside closed lists are marked `in_vocab = false` (~0.2 %, left as they are).
+Post-model checks: a `detail` is kept only if its words occur in the phrase, allowing historical spellings and cue
+words (möglichst → bevorzugt); 2,455 dropped, mostly rightly ("Hauptfach"/"Nebenfach" 1,814 mentions come from the ad,
+not the phrase; they would need a per-ad rule). `detail_raw` keeps the model's version. Values outside closed lists are
+marked `in_vocab = false` (~0.2 %). **Context leaks:** the mapping sometimes tags what one example ad says, above all for
+short frequent phrases with several contexts ("verheirathet" → kinderlos, "absolvirter" → Bergschule/Techniker/Wundarzt,
+"wissenschaftlich gebildeter" → a whole ad). Tags whose value does not occur in the phrase (9,551) are checked again by
+the model with only the phrase (`verified`); 3,203 were rejected (7,447 mentions, 11 % of all tag mentions). They stay in
+`requirement_dict` but give no rows in `ad_requirements`. Known wrong rejections: "Reife- und Lehrbefähigungszeugnisse"
+→ Matura/belegtes Gesuch (135 mentions); fixing it needs a vocabulary example, i.e. a full re-map. Open question for later:
+`sprachkenntnisse` has the highest rejection rate (66 %), check whether "Landessprachen" should become a value.
 
 ## Open items (in order)
 
-1. **Value leaks from the context (step 5).** The mapping sometimes tags what an example ad says, not the phrase:
-   `"verheirathet"` → kinderlos (340 mentions), `"gebildetes"` → weiblich, `"absolvirter"` → Bergschule/Techniker/Wundarzt,
-   `"guter"` → Schießen/Musik. A value-in-phrase flag alone cannot separate these from fair paraphrases (29 % of tag
-   mentions are flagged, mostly like "gehörig instruierten" → vorschriftsmäßiges Gesuch). So the flagged tags (~9,000
-   distinct phrase–tag pairs, ~150 requests) are checked again by the model with **only the phrase** (`TagVerifier`,
-   `verified` in the tag struct; rejected tags give no ad rows). Next on the cluster:
-   `python -m hisrag.normalize requirements --verify-pilot` → review `requirements_verify_pilot.csv` (120 tags, top 60 by
-   mentions + 60 random); if good, the full run, then the section "Tags checked without context" in notebook 03.
-   Detail check (done): spelling folding and cue words cut the drops from 2,797 to 2,459; the remaining drops are right
-   ("Hauptfach"/"Nebenfach" 1,814 mentions, "in Wort und Schrift", "bevorzugt" come from the ad, not the phrase). If
-   Hauptfach/Nebenfach is needed, it has to come from a per-ad rule on the text, not the phrase dictionary.
-2. **Step 6: salary.** Columns `salary`, `salary_period`, `unspecific_salary`, `verpflegung`, `salary_importance`
+1. **Step 6: salary.** Columns `salary`, `salary_period`, `unspecific_salary`, `verpflegung`, `salary_importance`
    (spans like `"von 10 fl CM"`, `"Monats⸗lohn"`, `"Quartiergeld"`, `"Wohnung, ganzer Verköstigung"`). Currency depends
    on date (Gulden CM until 1858, ö.W. after, Kronen from 1892/1900, Schilling 1925, Reichsmark 1938–45, Schilling
    again). Nominal amounts only in the PoC. Can be built and tested locally; LLM only for what the rules miss.
-3. Steps 7 onward as in the table.
+2. Steps 7 onward as in the table.
 
 Smaller known issues: one hallucinated company name from context in step 5; single-occurrence OCR garbles in step 4
 ("Applent", "Praschneiderin") are mapped with guesses; the generic "Lehrling" category depends on its example.
