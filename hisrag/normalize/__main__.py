@@ -11,6 +11,10 @@
           derived/requirement_dict, derived/ad_requirements. --pilot maps 20 phrases per column
           and writes a review CSV instead. Tags whose value is not in the phrase are then checked
           again without context; --verify-pilot checks 120 of them and writes a review CSV instead.
+  salary [--pilot]
+          step 6: amounts from the `salary` spans by rules (LLM for the few leftovers) →
+          derived/ad_salary (one row per amount), derived/ad_pay (main pay and benefits per ad).
+          --pilot writes 200 rule-parsed rows and 40 LLM leftovers to a review CSV instead.
 """
 
 import argparse
@@ -239,7 +243,56 @@ def run_requirements(cfg, pilot=False, verify_pilot=False, batch_size=40, worker
             "details_dropped_as_ungrounded": mapper.details_dropped, "usage": client.usage.summary()}
 
 
-STEPS = {"text": run_text, "dedup": run_dedup, "positions": run_positions, "requirements": run_requirements}
+SALARY_PILOT_ROWS = 200
+SALARY_PILOT_LEFTOVERS = 40
+
+
+def run_salary(cfg, pilot=False, workers=None) -> dict:
+    import pandas as pd
+
+    from hisrag.llm import DHClient
+    from hisrag.normalize import salary as S
+
+    spans = query("""
+        SELECT a.ad_id, a.newspaper, a.year, a.date, a.text, u.s.start AS start, u.s."end" AS "end", u.s.text AS phrase
+        FROM ads a JOIN ad_text t USING (ad_id), UNNEST(a.salary) AS u(s)
+        WHERE NOT t.flag_death_register""", cfg=cfg)
+    benefits = query(" UNION ALL ".join(f"""
+        SELECT a.ad_id, a.newspaper, a.year, u.s.text AS phrase
+        FROM ads a JOIN ad_text t USING (ad_id), UNNEST(a.{c}) AS u(s)
+        WHERE NOT t.flag_death_register""" for c in ("verpflegung", "unspecific_salary")), cfg=cfg)
+    rows = S.parse_spans(spans)
+    left = S.leftovers(rows)
+    client = DHClient(cfg)
+    if workers:
+        client.max_workers = workers
+
+    if pilot:
+        left = left.sample(min(SALARY_PILOT_LEFTOVERS, len(left)), random_state=0).sort_values("key")
+        results, stats = S.run_llm(client, left)
+        sample = rows[rows["parsed_by"] == "rules"].sample(min(SALARY_PILOT_ROWS, len(rows)), random_state=0)
+        llm = rows[rows["snippet"].isin(left["key"])].drop_duplicates("snippet")
+        llm = S.apply_llm(llm, results).assign(parsed_by=lambda d: d["parsed_by"].fillna("llm: no amount"))
+        cols = ["year", "snippet", "amount_min", "amount_max", "currency", "standard", "standard_source",
+                "component", "period", "period_source", "parsed_by"]
+        out = derived_dir("pilot", cfg)
+        out.mkdir(parents=True, exist_ok=True)
+        pd.concat([sample, llm])[cols].to_csv(out / "salary_pilot.csv", index=False, encoding="utf-8-sig")
+        return {"salary_spans": len(rows), "parsed_by": rows["parsed_by"].value_counts(dropna=False).to_dict(),
+                "leftovers_distinct": len(S.leftovers(rows)), "pilot": stats,
+                "review_csv": str(out / "salary_pilot.csv"), "usage": client.usage.summary()}
+
+    results, stats = S.run_llm(client, left)
+    rows = S.apply_llm(rows, results)
+    rows = S.assign_standard_by_date(rows, spans["date"])
+    write_partitioned(rows, derived_dir("ad_salary", cfg), S.AD_SALARY_SCHEMA)
+    pay = S.ad_pay(rows, benefits)
+    write_partitioned(pay, derived_dir("ad_pay", cfg), S.AD_PAY_SCHEMA)
+    return {**S.summarize(rows, pay), "llm": stats, "usage": client.usage.summary()}
+
+
+STEPS = {"text": run_text, "dedup": run_dedup, "positions": run_positions, "requirements": run_requirements,
+         "salary": run_salary}
 
 
 def main() -> None:
@@ -260,6 +313,8 @@ def main() -> None:
     elif args.step == "requirements":
         report = run_requirements(cfg, pilot=args.pilot, verify_pilot=args.verify_pilot,
                                   batch_size=args.batch_size or 40, workers=args.workers)
+    elif args.step == "salary":
+        report = run_salary(cfg, pilot=args.pilot, workers=args.workers)
     else:
         report = STEPS[args.step](cfg)
     print(json.dumps(report, ensure_ascii=False, indent=1, default=str))

@@ -43,7 +43,7 @@ Consequences of the scale (120 requests/min, ~10 tokens/s per request):
 | 3 | Repeated printings | done | `ad_dups`: 44,291 distinct ads; `is_canonical` marks one printing per ad |
 | 4 | Position dictionary (LLM) | done | `position_dict` (6,090 forms, 4,402 positions), `ad_positions` (26,347 mentions, 21,173 ads) |
 | 5 | Requirement tags (LLM) | done | `requirement_dict` (22,494 phrases), `ad_requirements` (66,632 tag mentions, 23,037 ads) |
-| 6 | Salary parsing | **next** | amount, currency (fl. CM/ö.W., Kronen, Schilling, RM), period; rules first, LLM for leftovers |
+| 6 | Salary parsing | built, **cluster run next** | `ad_salary` (one row per amount), `ad_pay` (main pay, benefits per ad); rules read 96 %, LLM ~500 forms |
 | 7 | Final clean table + sanity plots | open | one joined view, plots per decade |
 | 8 | Embedding comparison | open | synthetic known-item queries (Qwen writes a query for a known ad), recall@k, keyword vs. vector vs. hybrid |
 | 9 | Index | open | LanceDB with vectors, keyword index and filter columns |
@@ -96,12 +96,25 @@ the model with only the phrase (`verified`); 3,203 were rejected (7,447 mentions
 → Matura/belegtes Gesuch (135 mentions); fixing it needs a vocabulary example, i.e. a full re-map. Open question for later:
 `sprachkenntnisse` has the highest rejection rate (66 %), check whether "Landessprachen" should become a value.
 
+**Salary (step 6).** The `salary` spans (22,646 in 10,940 ads, 95 % in job offers, almost all 1850s–1910s; only 64
+after 1920) hold bare amounts ("600 fl.", "1200 K"); what an amount pays for, its period and the Gulden standard are
+in the text around it, so rules read a window of ±60–80 characters. Locally the rules read 96 % of the spans, ~450 are
+numbers that are no money (bread rations in Gramm, allowances in "pCt.", teaching hours), ~500 go to the LLM.
+Decisions: amounts stay **nominal** (no CM → ö.W. conversion, user's decision); Gulden get CM/ö.W. as stated, else by
+date (CM until October 1858; the stated standards confirm the rule: 1 stated CM after 1858); Kreuzer count 1/100 fl. in
+ö.W. and 1/60 in CM; Heller 1/100 K. `component` from the nearest keyword (the word right after the amount wins,
+"42 fl. Quartiergeld"; lists of amounts take the keyword at their end); period stated or **assumed yearly** for
+Gehalt, Zulage, Quartiergeld, Remuneration, Pension (flag `period_source`). Main pay per ad (`ad_pay`) =
+Gehalt/Lohn/Remuneration/Taggeld, never Kaution or Pension; alternatives give min–max. Benefit flags per ad from the
+`verpflegung` and `unspecific_salary` spans; `salary_importance` is left out (almost only stray "fl." fragments).
+Known limits: keywords farther than the window (Quartiergeld categories, long position lists) leave `component` empty
+(~7 %); OCR-split numbers ("9 45 fl.") are read wrongly.
+
 ## Open items (in order)
 
-1. **Step 6: salary.** Columns `salary`, `salary_period`, `unspecific_salary`, `verpflegung`, `salary_importance`
-   (spans like `"von 10 fl CM"`, `"Monats⸗lohn"`, `"Quartiergeld"`, `"Wohnung, ganzer Verköstigung"`). Currency depends
-   on date (Gulden CM until 1858, ö.W. after, Kronen from 1892/1900, Schilling 1925, Reichsmark 1938–45, Schilling
-   again). Nominal amounts only in the PoC. Can be built and tested locally; LLM only for what the rules miss.
+1. **Step 6: salary, built and tested locally, not yet run on the cluster.** `hisrag/normalize/salary.py`. Next:
+   `python -m hisrag.normalize salary --pilot` → review `salary_pilot.csv`, then the full run and
+   `notebooks/04_salary_review.ipynb`.
 2. Steps 7 onward as in the table.
 
 Smaller known issues: one hallucinated company name from context in step 5; single-occurrence OCR garbles in step 4

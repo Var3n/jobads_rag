@@ -124,6 +124,23 @@ code change is fast, since unchanged requests come from the response cache; edit
 `notebooks/03_requirements_review.ipynb` shows top values per dimension, dropped details, values outside the lists, and a
 first comparison of personal requirements in ads for female vs. male position titles.
 
+**Step 6: salary (rules, LLM only for leftovers).** Amounts in the `salary` spans ("600 fl.", "1200 K", "367 fl. 50 kr.", "1400—1600 K") are read by rules from a
+window of ad text around each span: the currency standard of Gulden (C. M. / ö. W. when stated, otherwise by date: CM
+until October 1858), what the amount pays for (`component`: gehalt, lohn, remuneration, taggeld, zulage,
+quartiergeld, kaution, pension) and its period (stated, or assumed yearly for salaries and allowances). Amounts stay
+nominal. Only the few spans the rules cannot read (numbers in words, OCR garbles, ~500 forms) go to the LLM. Writes
+`data/derived/ad_salary/` (one row per amount) and `data/derived/ad_pay/` (per ad: main pay as min–max of its
+Gehalt/Lohn/Remuneration/Taggeld amounts, without Kaution or Pension, plus benefit flags such as `benefit_wohnung`,
+`benefit_kost`, `benefit_kleidung` from the `verpflegung` and `unspecific_salary` spans).
+
+```bash
+python -m hisrag.normalize salary --pilot   # 200 rule-read amounts + 40 LLM leftovers → data/derived/pilot/salary_pilot.csv
+python -m hisrag.normalize salary           # full run, rules in seconds, ~13 LLM requests
+```
+
+`notebooks/04_salary_review.ipynb` shows coverage, samples per component, the currency standard check, median pay per
+decade and position category, and benefits per decade.
+
 Query the result from Python or a notebook:
 
 ```python
