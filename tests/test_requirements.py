@@ -125,9 +125,30 @@ def test_frequent_phrases_get_contexts_from_different_ads_and_years():
     ("200 fl. C. M.", "eine Caution von 200 fl. C. M. in Hypothek", True),
     ("Korrespondenz", "deutsche Correspondenz", True),                 # modernized spelling
     ("Alter 4 bis 6 Jahre", "Kinder im Alter von 4 bis 6 Jahren", True),
+    # audit of the full run: historical spellings and cue words are grounded ...
+    ("tüchtig, korrekt, sehr leserlich", "eine tüchtige, correcte sehr leserliche Hand- und Zifferschrift", True),
+    ("14 Jahre", "14jährigen äußern und innern Forstpraxis", True),
+    ("nahe Schottenfeld", "welcher ganz nähe der Schottenfelder Realschule wohnt", True),
+    ("bevorzugt", "mehrjährige Tätigkeit in einem Appreturbetrieb, möglichst als Meister", True),
+    ("abgeschlossen", "Absolvirung eines klinischen psychiatrischen Curses", True),
+    # ... details taken from the context still are not
+    ("bevorzugt", "mit technischen Vorkenntnissen", False),
+    ("Forstwirthe", "Nachweisung der mit entsprechendem Erfolge abgelegten Staatsprüfung", False),
+    ("Klavier", "Privat-Unterricht ertheilen zu können", False),
+    ("teilweise", "absolvirt", False),
 ])
 def test_detail_grounding(detail, phrase, kept):
     assert R.detail_is_grounded(detail, phrase) is kept
+
+
+@pytest.mark.parametrize("value, phrase, grounded", [
+    ("Kaution", "welches auch Caution zu leisten im Stande", True),
+    ("technische Hochschule", "die Studien an einer technischen Hochschule", True),
+    ("Buchführung", "ger", False),                      # fragment tagged from the context
+    ("Latein", "Deutsch und Französisch oder Deutsch", False),
+])
+def test_value_grounding(value, phrase, grounded):
+    assert R.value_is_grounded(value, phrase) is grounded
 
 
 def test_ungrounded_details_are_dropped_from_dictionary(cfg):

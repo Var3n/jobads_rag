@@ -1,6 +1,6 @@
 # Project status (proof of concept)
 
-Last updated: 2026-09-29, after step 5. Read this first when picking the project up; `README.md` has setup and commands.
+Last updated: 2026-09-30, step 5 audit. Read this first when picking the project up; `README.md` has setup and commands.
 
 ## Goal and constraints
 
@@ -88,10 +88,16 @@ values outside closed lists are marked `in_vocab = false` (~0.2 %, left as they 
 
 ## Open items (in order)
 
-1. **Audit of the detail check (step 5).** The full run dropped 2,797 details as ungrounded. After the `detail_raw`
-   change the user re-runs `python -m hisrag.normalize requirements` on the cluster (served from cache, minutes) and
-   reviews `notebooks/03_requirements_review.ipynb`. If many dropped details are actually in the phrase, relax
-   `detail_is_grounded` in `hisrag/normalize/requirements.py` (no new API calls needed).
+1. **Value leaks from the context (step 5).** Audit of 50 dropped details (2026-09-30): ~27 were rightly dropped
+   (context: "bevorzugt", "Hauptfach", "Klavier"), ~11 were in the phrase in historical spelling, ~12 were paraphrases.
+   `detail_is_grounded` now folds historical spellings (c/k/z, th, umlauts, accents) and accepts cue words
+   (`DETAIL_CUES`: möglichst → bevorzugt, absolvirt → abgeschlossen); this recovers 6 of the 11 without keeping any
+   context detail. The bigger finding: in ~12 of the 50 rows the **value itself** came from the context (`"ger"` →
+   Buchführung/Kaution, 10 mentions; `"Deutsch und Französisch"` → Latein; `"également familières"` → Italienisch).
+   `value_is_grounded` flags these but also ~7 fair paraphrases (Ortskenntnis, Maturazeugnis), so it does not drop
+   anything yet. Next: re-run `python -m hisrag.normalize requirements` on the cluster (cache, minutes), read the new
+   section "Values that do not occur in the phrase" in `notebooks/03_requirements_review.ipynb`, then decide the rule
+   (e.g. drop tags of short fragments, or where value and detail are both ungrounded) or a prompt change.
 2. **Step 6: salary.** Columns `salary`, `salary_period`, `unspecific_salary`, `verpflegung`, `salary_importance`
    (spans like `"von 10 fl CM"`, `"Monats⸗lohn"`, `"Quartiergeld"`, `"Wohnung, ganzer Verköstigung"`). Currency depends
    on date (Gulden CM until 1858, ö.W. after, Kronen from 1892/1900, Schilling 1925, Reichsmark 1938–45, Schilling

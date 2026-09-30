@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import unicodedata
 from collections import Counter
 from pathlib import Path
 from typing import Literal
@@ -139,14 +140,45 @@ def collect_phrases(spans: pd.DataFrame) -> pd.DataFrame:
 
 _DETAIL_WORD = re.compile(r"[^\W\d_]{4,}|\d{2,}")
 
+# Standard details the model writes for a historical wording that shares no letters with them.
+DETAIL_CUES = {
+    "bevorzugt": ("bevorzug", "vorzug", "möglichst", "womöglich", "eventuell", "erwünscht", "wünschenswert"),
+    "abgeschlossen": ("absolv", "abgelegt", "beendet", "vollendet", "zurückgelegt"),
+}
+
+
+def _fold(text: str) -> str:
+    """Lower case without diacritics and with historical spellings unified (Correcte → korrekte,
+    Theil → teil, nähe → nahe, familières → familieres), applied to both sides of a comparison."""
+    text = unicodedata.normalize("NFKD", normalize_text(text).lower().replace("ß", "ss"))
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    text = re.sub(r"c(?=[eiy])", "z", text.replace("ck", "k").replace("th", "t"))
+    return text.replace("c", "k")
+
 
 def detail_is_grounded(detail: str, phrase: str) -> bool:
     """A detail must restate the phrase, not the context: every content word of the detail
     (letters ≥ 4, or a number) has to occur in the phrase, allowing spelling variants
-    (Correspondenz / Korrespondenz, vollkommen / vollkommene)."""
-    words = _DETAIL_WORD.findall(normalize_text(detail).lower())
-    text = phrase_key(phrase)
-    return all(w in text or fuzz.partial_ratio(w, text) >= 80 for w in words)
+    (Correspondenz / Korrespondenz, vollkommen / vollkommene, 14 Jahre / 14jährigen) and the
+    cue words of DETAIL_CUES (möglichst → bevorzugt)."""
+    text = _fold(phrase_key(phrase))
+    for word in _DETAIL_WORD.findall(normalize_text(detail).lower()):
+        cues = DETAIL_CUES.get(word, ())
+        if any(_fold(c) in text for c in cues):
+            continue
+        w = _fold(word)
+        if not (w in text or fuzz.partial_ratio(w, text) >= 80):
+            return False
+    return True
+
+
+def value_is_grounded(value: str, phrase: str) -> bool:
+    """Diagnostic only: does any content word of the value occur in the phrase? False for values
+    taken from the context ("ger" → Buchführung), but also for modern paraphrases
+    ("hiesigen Platz" → Ortskenntnis), so it flags tags for review and does not drop them."""
+    text = _fold(phrase_key(phrase))
+    words = [_fold(w) for w in _DETAIL_WORD.findall(normalize_text(value).lower())]
+    return not words or any(w in text or fuzz.partial_ratio(w, text) >= 80 for w in words)
 
 
 class RequirementMapper:
