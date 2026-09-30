@@ -44,3 +44,12 @@ def normalize_text(text: str | None) -> str:
     s = _JOIN_SPACE.sub(r"\1", s)
     s = s.translate(_CHAR_MAP)  # after the hyphen rules, so ſ-words still count as lowercase there
     return _WS.sub(" ", s).strip()
+
+
+def fold_spelling(text: str) -> str:
+    """Lower case without diacritics and with historical spellings unified (Correcte → korrekte,
+    Theil → teil, nähe → nahe, familières → familieres), applied to both sides of a comparison."""
+    text = unicodedata.normalize("NFKD", normalize_text(text).lower().replace("ß", "ss"))
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    text = re.sub(r"c(?=[eiy])", "z", text.replace("ck", "k").replace("th", "t"))
+    return text.replace("c", "k")

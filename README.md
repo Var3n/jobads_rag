@@ -154,6 +154,20 @@ python -m hisrag.normalize clean
 `notebooks/05_clean_table.ipynb` has the sanity plots per decade (ads, kind of ad, coverage of positions, tags and pay,
 quality flags, language, position categories) with the table under each plot.
 
+**Step 8: retrieval comparison (LLM for test questions, embeddings).** The LLM writes a modern search question for
+~300 countable ads (spread over decades); every method ranks all searchable ads, and a hit is the ad or a reprint of
+it. Compared: BM25 on spelling-folded words, each configured embedding model, and BM25 + model hybrids (reciprocal
+rank fusion), on the ad text (`raw`) and on the ad plus its normalized fields (`enriched`). Embeddings are stored in
+`data/embeddings/<variant>/<model>/` in chunks of 1,024 ads, so an interrupted run resumes.
+
+```bash
+python -m hisrag.eval queries --pilot           # 30 questions → data/eval/queries_pilot.csv for review
+python -m hisrag.eval embed --pilot             # first chunk per model, estimates the full time
+python -m hisrag.eval queries                   # 300 questions → data/eval/queries.parquet
+python -m hisrag.eval embed                     # all models, raw text (--models a,b / --variant enriched|all)
+python -m hisrag.eval score                     # recall@1/5/10/50 and MRR per method
+```
+
 Query the result from Python or a notebook:
 
 ```python

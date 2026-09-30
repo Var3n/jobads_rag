@@ -6,6 +6,8 @@ paths:
   raw_csv: data/raw/wrz_extractions.csv
   ads_dir: data/ads                      # Parquet, partitioned newspaper=…/year=…
   derived_dir: data/derived              # one partitioned table per pipeline step, keyed by ad_id
+  embeddings_dir: data/embeddings        # vectors per text variant and model (outside derived: no DuckDB view)
+  eval_dir: data/eval                    # test questions and retrieval results (step 8)
   cache_db: data/cache/llm_cache.sqlite
   usage_log: data/logs/usage.jsonl
 

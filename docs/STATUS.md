@@ -114,7 +114,14 @@ Known limits: keywords farther than the window (Quartiergeld categories, long po
 
 ## Open items (in order)
 
-1. **Step 8: embedding comparison.** Not started; see the table.
+1. **Step 8: retrieval comparison, built and tested locally.** `hisrag/eval/retrieval.py`, `python -m hisrag.eval
+   queries|embed|score`. All five embedding models are tested (user's decision). Questions: ~300 countable ads, decades
+   weighted by the square root of their size; the LLM writes a modern question without years, names, addresses,
+   amounts or verbatim rare words (`leakage` = share of long query words found verbatim in the ad). Hit = the ad or
+   a reprint (same `dup_cluster_id`) among all 49,817 searchable ads. BM25 uses the spelling folding of step 5
+   (`fold_spelling`, now in `normalize/text.py`) plus light suffix stripping. Embeddings live in `data/embeddings/`
+   (outside `derived`, so no DuckDB view), chunks of 1,024, resumable. Next on the cluster: `queries --pilot`
+   (review CSV) and `embed --pilot` (time per model), then the full runs and `score`.
 2. Steps 9 onward as in the table.
 
 **Clean table (step 7).** `ad_clean`: 52,823 regions, 49,817 searchable, 41,024 countable (30,670 job offers, 5,896

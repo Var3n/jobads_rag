@@ -11,7 +11,6 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import unicodedata
 from collections import Counter
 from pathlib import Path
 from typing import Literal
@@ -25,7 +24,7 @@ from rapidfuzz import fuzz
 from hisrag.config import REPO_ROOT
 from hisrag.llm.client import DHClient
 from hisrag.normalize.batching import run_batches
-from hisrag.normalize.text import normalize_text
+from hisrag.normalize.text import fold_spelling, normalize_text
 
 COLUMNS = ("job_specific", "background", "language", "activity", "attitude_towards_work", "interpersonal")
 VOCAB_PATH = REPO_ROOT / "vocab" / "requirements.yaml"
@@ -147,13 +146,7 @@ DETAIL_CUES = {
 }
 
 
-def _fold(text: str) -> str:
-    """Lower case without diacritics and with historical spellings unified (Correcte → korrekte,
-    Theil → teil, nähe → nahe, familières → familieres), applied to both sides of a comparison."""
-    text = unicodedata.normalize("NFKD", normalize_text(text).lower().replace("ß", "ss"))
-    text = "".join(ch for ch in text if not unicodedata.combining(ch))
-    text = re.sub(r"c(?=[eiy])", "z", text.replace("ck", "k").replace("th", "t"))
-    return text.replace("c", "k")
+_fold = fold_spelling
 
 
 def detail_is_grounded(detail: str, phrase: str) -> bool:
