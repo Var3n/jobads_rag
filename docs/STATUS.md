@@ -44,7 +44,7 @@ Consequences of the scale (120 requests/min, ~10 tokens/s per request):
 | 4 | Position dictionary (LLM) | done | `position_dict` (6,090 forms, 4,402 positions), `ad_positions` (26,347 mentions, 21,173 ads) |
 | 5 | Requirement tags (LLM) | done | `requirement_dict` (22,494 phrases), `ad_requirements` (66,632 tag mentions, 23,037 ads) |
 | 6 | Salary parsing | done | `ad_salary` (22,639 spans: 21,667 by rules, 289 by LLM), `ad_pay` (9,722 ads with main pay, benefits per ad) |
-| 7 | Final clean table + sanity plots | **next** | one joined view, plots per decade |
+| 7 | Final clean table + sanity plots | built, **cluster run next** | one joined view, plots per decade |
 | 8 | Embedding comparison | open | synthetic known-item queries (Qwen writes a query for a known ad), recall@k, keyword vs. vector vs. hybrid |
 | 9 | Index | open | LanceDB with vectors, keyword index and filter columns |
 | 10 | Agent tools | open | `search_ads`, `get_ad`, `aggregate` (SQL templates), `expand_concept` |
@@ -114,8 +114,13 @@ Known limits: keywords farther than the window (Quartiergeld categories, long po
 
 ## Open items (in order)
 
-1. **Step 7: final clean table + sanity plots.** One joined view over steps 1–6 (ad, text flags, canonical printing,
-   positions, requirements, pay) and plots per decade to catch gaps before indexing.
+1. **Step 7: clean table, built and tested locally.** `hisrag/normalize/clean.py` → `ad_clean` (one row per ad,
+   `searchable` / `countable`), `notebooks/05_clean_table.ipynb` (plots per decade; matplotlib added as a dependency,
+   so `pip install -e .` on the cluster once). Next: `python -m hisrag.normalize clean`, then review the notebook.
+   Findings from the real steps 1–3 and 6 already: 41,023 countable ads of 52,823 regions; the 1920s (271) and 1930s
+   (17) are nearly empty, so the corpus is effectively 1850–1918 plus 1940s; the 1850s are half job searches, from the
+   1870s on 83–89 % job offers; pay is stated in 67 % of job offers in the 1860s, falling to ~15 % by 1900 and ~0 after
+   1920; the death register sits in the 1870s–1880s.
 2. Steps 8 onward as in the table.
 
 Smaller known issues: one hallucinated company name from context in step 5; single-occurrence OCR garbles in step 4

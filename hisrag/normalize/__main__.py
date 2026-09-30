@@ -15,6 +15,7 @@
           step 6: amounts from the `salary` spans by rules (LLM for the few leftovers) →
           derived/ad_salary (one row per amount), derived/ad_pay (main pay and benefits per ad).
           --pilot writes 200 rule-parsed rows and 40 LLM leftovers to a review CSV instead.
+  clean   step 7: one row per ad joining steps 1–6, with `searchable` / `countable` → derived/ad_clean
 """
 
 import argparse
@@ -291,8 +292,17 @@ def run_salary(cfg, pilot=False, workers=None) -> dict:
     return {**S.summarize(rows, pay), "llm": stats, "usage": client.usage.summary()}
 
 
+def run_clean(cfg) -> dict:
+    from hisrag.normalize import clean as C
+
+    table = C.build(cfg)
+    out = derived_dir("ad_clean", cfg)
+    C.write(table, out)
+    return {**C.summarize(table), "written_to": str(out)}
+
+
 STEPS = {"text": run_text, "dedup": run_dedup, "positions": run_positions, "requirements": run_requirements,
-         "salary": run_salary}
+         "salary": run_salary, "clean": run_clean}
 
 
 def main() -> None:

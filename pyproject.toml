@@ -18,6 +18,7 @@ dependencies = [
     "tqdm>=4.66",
     "requests>=2.31",
     "rapidfuzz>=3.6",
+    "matplotlib>=3.8",
 ]
 
 [project.optional-dependencies]

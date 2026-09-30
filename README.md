@@ -141,6 +141,19 @@ python -m hisrag.normalize salary           # full run, rules in seconds, ~13 LL
 `notebooks/04_salary_review.ipynb` shows coverage, samples per component, the currency standard check, median pay per
 decade and position category, and benefits per decade.
 
+**Step 7: clean table (SQL, no LLM).** Joins steps 1–6 into `data/derived/ad_clean/`, one row per ad: text, language,
+quality flags and warning, repeated-printing cluster, position terms/lemmas/categories and gender of the wording,
+requirement tags, main pay, all amounts and benefit flags. `searchable` excludes death-register entries and bare
+headings; `countable` additionally keeps only the canonical printing and drops text invented by the post-correction.
+Counts of ads use `countable`.
+
+```bash
+python -m hisrag.normalize clean
+```
+
+`notebooks/05_clean_table.ipynb` has the sanity plots per decade (ads, kind of ad, coverage of positions, tags and pay,
+quality flags, language, position categories) with the table under each plot.
+
 Query the result from Python or a notebook:
 
 ```python
