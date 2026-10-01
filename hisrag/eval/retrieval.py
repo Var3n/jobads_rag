@@ -107,7 +107,7 @@ Die Frage:
 - verwendet heutige Begriffe und eigene Worte; seltene oder auffällige Wörter der Anzeige werden nicht übernommen;
 - enthält keine Jahreszahlen oder Daten (der Zeitraum wird getrennt gefiltert), keine Namen von Personen oder Firmen, keine Adressen und keine Orte unterhalb eines Kronlands oder Bundeslands (Wien ist erlaubt);
 - hat 5 bis 15 Wörter.
-Das Kriterium sagt in einem Satz, was eine Anzeige erfüllen muss, um für die Frage relevant zu sein (z. B. "Die Anzeige bietet eine Lehrerstelle an einer Volksschule an und nennt eine freie Wohnung oder Dienstwohnung.").
+Das Kriterium sagt in einem Satz, was JEDE relevante Anzeige erfüllen muss (z. B. "Die Anzeige bietet eine Lehrerstelle an einer Volksschule an und nennt eine freie Wohnung oder Dienstwohnung."). Es ist genau so allgemein wie die Frage: es nennt keine Einzelheiten der Beispielanzeige, die nicht in der Frage stehen (keinen bestimmten Ort, keine bestimmte Institution, keinen engeren Beruf, keinen Betrag). Fragt die Frage nach Handwerkern, verlangt das Kriterium einen Handwerker, nicht einen Maurer.
 Antworte mit einem JSON-Objekt {"items": [...]} mit genau einem Element pro Anzeige, "i" = Nummer der Anzeige."""
 
 
