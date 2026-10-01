@@ -1,11 +1,16 @@
-"""Step 8: which retrieval finds a known ad best?
+"""Step 8: which retrieval answers research questions best?
 
-There is no evaluation set yet, so the LLM writes one: for a stratified sample of countable ads it
-writes the search question a researcher would ask in modern German to find that ad again (known-item
-queries). Each method ranks all searchable ads; a hit is the target ad or any printing of it
-(same `dup_cluster_id`). Compared: BM25 on spelling-folded words, every configured embedding model,
-and a hybrid of BM25 and each model (reciprocal rank fusion). Two document texts: the ad as printed
-("raw") and the ad plus the normalized fields of steps 4–6 ("enriched").
+There is no evaluation set yet, so the LLM builds one in two steps (pooling, as in TREC):
+
+1. From a stratified sample of seed ads it writes research questions a historian would put to the
+   collection, each with a relevance criterion; the seed ad is one of several relevant ads.
+2. Every method returns its top 10 for every question; the LLM judges each pooled ad against the
+   question and criterion without knowing which method found it (2 relevant, 1 partly, 0 not).
+
+Compared: BM25 on spelling-folded words, every configured embedding model, and a hybrid of BM25 and
+each model (reciprocal rank fusion), each on the ad as printed ("raw") and on the ad plus the
+normalized fields of steps 4–6 ("enriched"). Measures: precision@10 (grade 2), nDCG@10 and recall
+against all relevant ads found in the pool.
 """
 
 from __future__ import annotations
@@ -15,6 +20,7 @@ import re
 import time
 from collections import Counter
 from pathlib import Path
+from typing import Literal
 
 import numpy as np
 import pandas as pd
@@ -30,22 +36,22 @@ from hisrag.normalize.text import fold_spelling, normalize_text
 
 VARIANTS = ("raw", "enriched")
 CHUNK = 1024          # documents per stored embedding file; the pilot embeds chunk 0
-TOP_K = 100           # ranks kept per query and method
+DEPTH = 10            # results per method and question that are pooled and judged
 RRF_K = 60
-KS = (1, 5, 10, 50)
 
 # ------------------------------------------------------------------ documents
 
 
 def documents(cfg: Config | None = None) -> pd.DataFrame:
     """All searchable ads in a fixed order (ad_id), with both text variants."""
-    d = query("""SELECT ad_id, dup_cluster_id, decade, label, countable, heading_text, text_norm,
+    d = query("""SELECT ad_id, dup_cluster_id, decade, label, countable, lang, heading_text, text_norm,
+                        position_lemmas IS NOT NULL AS has_position,
                         position_modern, requirements, pay_min, pay_max, pay_currency, pay_period
                  FROM ad_clean WHERE searchable ORDER BY ad_id""", cfg=cfg)
     head = d["heading_text"].map(normalize_text)
     d["raw"] = [f"{h}\n{t}" if h else t for h, t in zip(head, d["text_norm"])]
     d["enriched"] = [f"{raw}\n{_fields(r)}".rstrip() for raw, r in zip(d["raw"], d.itertuples())]
-    return d[["ad_id", "dup_cluster_id", "decade", "label", "countable", "raw", "enriched"]]
+    return d[["ad_id", "dup_cluster_id", "decade", "label", "countable", "lang", "has_position", "raw", "enriched"]]
 
 
 def _listish(x) -> list:
@@ -68,13 +74,14 @@ def _fields(r) -> str:
     return "\n".join(parts)
 
 
-# ------------------------------------------------------------------ test questions
+# ------------------------------------------------------------------ research questions
 
 
-def sample_targets(docs: pd.DataFrame, n: int = 300, seed: int = 0, min_chars: int = 80) -> pd.DataFrame:
-    """Countable ads, spread over decades in proportion to the square root of their size, so thin
-    decades are represented without dominating."""
-    pool = docs[docs["countable"] & (docs["raw"].str.len() >= min_chars)]
+def sample_seeds(docs: pd.DataFrame, n: int = 300, seed: int = 0, min_chars: int = 120) -> pd.DataFrame:
+    """Countable German ads that name a position and are long enough to be about something (no notice
+    tails, no loan or sale ads), spread over decades in proportion to the square root of their size."""
+    pool = docs[docs["countable"] & docs["has_position"] & (docs["lang"] == "de")
+                & (docs["raw"].str.len() >= min_chars)]
     sizes = pool.groupby("decade").size()
     weights = np.sqrt(sizes)
     alloc = (n * weights / weights.sum()).round().astype(int).clip(lower=1)
@@ -82,49 +89,52 @@ def sample_targets(docs: pd.DataFrame, n: int = 300, seed: int = 0, min_chars: i
     return pd.concat(parts).sort_values("ad_id").reset_index(drop=True)
 
 
-class QueryItem(BaseModel):
+class QuestionItem(BaseModel):
     i: int
-    query: str
+    question: str
+    criterion: str
 
 
-class QueryBatch(BaseModel):
-    items: list[QueryItem]
+class QuestionBatch(BaseModel):
+    items: list[QuestionItem]
 
 
-QUERY_PROMPT = """Du hilfst, eine Suchmaschine für historische Stellenanzeigen der Wiener Zeitung (1850–1950) zu testen.
-Zu jeder Anzeige schreibst du eine Suchanfrage, wie eine Historikerin sie stellen würde, die sich an diese Anzeige ungefähr erinnert und sie wiederfinden will.
-Regeln:
-- Modernes Deutsch mit modernen Begriffen und moderner Schreibung, 6 bis 15 Wörter, als Suchanfrage oder kurze Frage.
-- Nenne 2 bis 4 inhaltliche Merkmale der Anzeige: Stelle oder Tätigkeit, Anforderungen, Bedingungen, Art der Anzeige (Angebot, Gesuch, Vermittlung), Ort höchstens grob (Wien, Böhmen, Land).
-- Keine Jahreszahlen oder Daten, keine Namen von Personen oder Firmen, keine Adressen, keine genauen Beträge.
-- Übernimm keine seltenen Wörter oder Wendungen wörtlich aus der Anzeige, sondern umschreibe sie so, wie jemand heute sucht.
-- Die Anfrage muss zu dieser Anzeige passen und sie von anderen Anzeigen derselben Art unterscheiden können.
+QUESTION_PROMPT = """Du hilfst, eine Suchmaschine für historische Stellenanzeigen der Wiener Zeitung (1850–1950) zu testen. Historikerinnen und Wirtschaftshistoriker stellen ihr Forschungsfragen in modernem Deutsch.
+Zu jeder Anzeige schreibst du eine solche Forschungsfrage, für die diese Anzeige EINER VON VIELEN relevanten Treffern wäre, und ein Relevanzkriterium.
+
+Die Frage:
+- fragt nach einer Gruppe von Anzeigen, nicht nach dieser einen: nach einem Beruf oder einer Berufsgruppe und einem Aspekt (Anforderungen, Bedingungen, Lohn oder Naturalleistungen, Art der Anzeige, Lebensumstände der Bewerber), z. B. "Welche Sprachkenntnisse wurden von Gouvernanten verlangt?", "Stellengesuche von Gärtnern, die bei einer Herrschaft unterkommen wollten", "Lehrerstellen an Volksschulen mit freier Wohnung";
+- verwendet heutige Begriffe und eigene Worte; seltene oder auffällige Wörter der Anzeige werden nicht übernommen;
+- enthält keine Jahreszahlen oder Daten (der Zeitraum wird getrennt gefiltert), keine Namen von Personen oder Firmen, keine Adressen und keine Orte unterhalb eines Kronlands oder Bundeslands (Wien ist erlaubt);
+- hat 5 bis 15 Wörter.
+Das Kriterium sagt in einem Satz, was eine Anzeige erfüllen muss, um für die Frage relevant zu sein (z. B. "Die Anzeige bietet eine Lehrerstelle an einer Volksschule an und nennt eine freie Wohnung oder Dienstwohnung.").
 Antworte mit einem JSON-Objekt {"items": [...]} mit genau einem Element pro Anzeige, "i" = Nummer der Anzeige."""
 
 
-def _query_messages(batch: pd.DataFrame) -> list[dict]:
+def _question_messages(batch: pd.DataFrame) -> list[dict]:
     ads = "\n\n".join(f"{n}. ({r.label}) {r.raw[:1500]}" for n, r in enumerate(batch.itertuples(), 1))
-    return [{"role": "system", "content": QUERY_PROMPT}, {"role": "user", "content": "Anzeigen:\n\n" + ads}]
+    return [{"role": "system", "content": QUESTION_PROMPT}, {"role": "user", "content": "Anzeigen:\n\n" + ads}]
 
 
-def write_queries(client: DHClient, targets: pd.DataFrame, *, batch_size: int = 10,
-                  progress: bool = True) -> tuple[pd.DataFrame, dict]:
-    rows = targets.assign(key=targets["ad_id"])
-    results, stats = run_batches(client, rows, job="eval_queries", batch_size=batch_size, progress=progress,
-                                 build_messages=_query_messages, result_model=QueryBatch,
-                                 empty_item=lambda: QueryItem(i=1, query=""))
-    out = targets[["ad_id", "dup_cluster_id", "decade", "label", "raw"]].copy()
-    out["query"] = [results[a].query.strip() if a in results else "" for a in out["ad_id"]]
-    out["leakage"] = [verbatim_share(q, t) for q, t in zip(out["query"], out["raw"])]
-    out = out[out["query"] != ""].reset_index(drop=True)
+def write_questions(client: DHClient, seeds: pd.DataFrame, *, batch_size: int = 10,
+                    progress: bool = True) -> tuple[pd.DataFrame, dict]:
+    rows = seeds.assign(key=seeds["ad_id"])
+    results, stats = run_batches(client, rows, job="eval_questions", batch_size=batch_size, progress=progress,
+                                 build_messages=_question_messages, result_model=QuestionBatch,
+                                 empty_item=lambda: QuestionItem(i=1, question="", criterion=""))
+    out = seeds[["ad_id", "dup_cluster_id", "decade", "label", "raw"]].rename(
+        columns={"ad_id": "seed_ad_id", "dup_cluster_id": "seed_cluster_id"})
+    out["question"] = [results[a].question.strip() if a in results else "" for a in seeds["ad_id"]]
+    out["criterion"] = [results[a].criterion.strip() if a in results else "" for a in seeds["ad_id"]]
+    out["leakage"] = [verbatim_share(q, t) for q, t in zip(out["question"], out["raw"])]
+    out = out[out["question"] != ""].reset_index(drop=True)
     out.insert(0, "query_id", range(len(out)))
     return out, stats
 
 
 def verbatim_share(q: str, text: str) -> float:
-    """Share of the query's longer words (≥ 6 letters) that occur verbatim in the ad: high values
-    make the question easy for keyword search."""
-    words = [w for w in re.findall(r"[^\W\d_]{6,}", q.lower())]
+    """Share of the question's longer words (≥ 6 letters) that occur verbatim in the seed ad."""
+    words = re.findall(r"[^\W\d_]{6,}", q.lower())
     if not words:
         return 0.0
     t = text.lower()
@@ -134,19 +144,17 @@ def verbatim_share(q: str, text: str) -> float:
 # ------------------------------------------------------------------ BM25
 
 _STOP = set("""der die das den dem des ein eine einer eines einem einen und oder mit von zu zur zum im in an am auf
-für bei als auch aus nach wird werden ist sind hat haben sich nicht nur wie so wo welche welcher welches sucht gesucht
-suche stelle anzeige inserat""".split())
+für bei als auch aus nach wird werden ist sind hat haben sich nicht nur wie so wo welche welcher welches wurden wurde
+gab gibt suchten sucht gesucht suche anzeige anzeigen inserat inserate""".split())
 _SUFFIX = re.compile(r"(?:ern|em|en|er|es|e|n|s)$")
 
 
 def tokens(text: str) -> list[str]:
-    words = re.findall(r"[a-z0-9]+", fold_spelling(text))
     out = []
-    for w in words:
+    for w in re.findall(r"[a-z0-9]+", fold_spelling(text)):
         if len(w) < 2 or w in _STOP:
             continue
-        stem = _SUFFIX.sub("", w) if len(w) > 5 else w
-        out.append(stem)
+        out.append(_SUFFIX.sub("", w) if len(w) > 5 else w)
     return out
 
 
@@ -165,7 +173,7 @@ class BM25:
         self.index = {t: (np.array([p[0] for p in ps]), np.array([p[1] for p in ps], dtype=np.float32))
                       for t, ps in postings.items()}
 
-    def search(self, q: str, k: int = TOP_K) -> np.ndarray:
+    def search(self, q: str, k: int = DEPTH) -> np.ndarray:
         scores = np.zeros(self.n, dtype=np.float32)
         for term in set(tokens(q)):
             if term not in self.index:
@@ -227,7 +235,7 @@ def load_vectors(cfg: Config, variant: str, model: str, docs: pd.DataFrame) -> n
     return flat.values.to_numpy().reshape(len(flat), -1).astype(np.float32)
 
 
-def dense_search(doc_vectors: np.ndarray, query_vectors: np.ndarray, k: int = TOP_K) -> list[np.ndarray]:
+def dense_search(doc_vectors: np.ndarray, query_vectors: np.ndarray, k: int = DEPTH) -> list[np.ndarray]:
     out = []
     for i in range(0, len(query_vectors), 64):
         scores = query_vectors[i:i + 64] @ doc_vectors.T
@@ -235,7 +243,7 @@ def dense_search(doc_vectors: np.ndarray, query_vectors: np.ndarray, k: int = TO
     return out
 
 
-def rrf(*rankings: np.ndarray, k: int = TOP_K) -> np.ndarray:
+def rrf(*rankings: np.ndarray, k: int = DEPTH) -> np.ndarray:
     score: dict[int, float] = {}
     for ranking in rankings:
         for rank, doc in enumerate(ranking):
@@ -243,30 +251,14 @@ def rrf(*rankings: np.ndarray, k: int = TOP_K) -> np.ndarray:
     return np.array(sorted(score, key=score.get, reverse=True)[:k])
 
 
-# ------------------------------------------------------------------ scoring
-
-
-def hit_rank(ranking: np.ndarray, clusters: np.ndarray, target: str) -> int | None:
-    """1-based rank of the first result in the target's printing cluster, None if not in the top k."""
-    hits = np.nonzero(clusters[ranking] == target)[0]
-    return int(hits[0]) + 1 if len(hits) else None
-
-
-def metrics(ranks: pd.Series) -> dict:
-    r = ranks.astype("float")
-    out = {f"recall@{k}": round(float((r <= k).mean()), 3) for k in KS}
-    out["mrr"] = round(float((1 / r).fillna(0).mean()), 3)
-    return out
-
-
-def evaluate(queries: pd.DataFrame, docs: pd.DataFrame, cfg: Config, client: DHClient,
-             models: list[str], progress: bool = True) -> pd.DataFrame:
-    """One row per (query, method) with the rank of the target (None = not in the top 100)."""
-    clusters = docs["dup_cluster_id"].to_numpy()
+def run_methods(questions: pd.DataFrame, docs: pd.DataFrame, cfg: Config, client: DHClient,
+                models: list[str], progress: bool = True) -> pd.DataFrame:
+    """One row per (question, method, variant, rank) with the ad found there (top DEPTH)."""
     runs: dict[str, list[np.ndarray]] = {}
-    bm25 = {v: BM25(docs[v].tolist()) for v in VARIANTS}
+    hybrid_depth = 50  # the hybrid fuses deeper lists than it returns
     for v in VARIANTS:
-        runs[f"bm25/{v}"] = [bm25[v].search(q) for q in queries["query"]]
+        bm = BM25(docs[v].tolist())
+        runs[f"bm25/{v}"] = [bm.search(q, hybrid_depth) for q in questions["question"]]
     for model in models:
         qv = None
         for v in VARIANTS:
@@ -276,18 +268,106 @@ def evaluate(queries: pd.DataFrame, docs: pd.DataFrame, cfg: Config, client: DHC
                     print(f"  skip {v}/{model}: not fully embedded", flush=True)
                 continue
             if qv is None:
-                qv = client.embed(queries["query"].tolist(), model, kind="query")
-            runs[f"{model}/{v}"] = dense_search(vectors, qv)
+                qv = client.embed(questions["question"].tolist(), model, kind="query")
+            runs[f"{model}/{v}"] = dense_search(vectors, qv, hybrid_depth)
             runs[f"hybrid:{model}/{v}"] = [rrf(a, b) for a, b in zip(runs[f"bm25/{v}"], runs[f"{model}/{v}"])]
+    ad_ids, clusters = docs["ad_id"].to_numpy(), docs["dup_cluster_id"].to_numpy()
     rows = []
     for method, rankings in runs.items():
         name, variant = method.rsplit("/", 1)
-        for (_, q), ranking in zip(queries.iterrows(), rankings):
-            rows.append({"query_id": q["query_id"], "method": name, "variant": variant,
-                         "rank": hit_rank(ranking, clusters, q["dup_cluster_id"])})
-    return pd.DataFrame(rows).astype({"rank": "Int32"})
+        for qid, ranking in zip(questions["query_id"], rankings):
+            # one result per printing cluster, as the index will show it: reprints must not count twice
+            seen, kept = set(), []
+            for doc in ranking:
+                if clusters[doc] not in seen:
+                    seen.add(clusters[doc])
+                    kept.append(doc)
+            for rank, doc in enumerate(kept[:DEPTH], 1):
+                rows.append({"query_id": qid, "method": name, "variant": variant, "rank": rank,
+                             "ad_id": ad_ids[doc], "cluster": clusters[doc]})
+    return pd.DataFrame(rows)
 
 
-def summary(results: pd.DataFrame) -> pd.DataFrame:
-    return (results.groupby(["method", "variant"])["rank"].apply(metrics).unstack()
-                   .sort_values("mrr", ascending=False))
+# ------------------------------------------------------------------ relevance judgments
+
+
+class Judgment(BaseModel):
+    i: int
+    grade: Literal[0, 1, 2]
+
+
+class JudgmentBatch(BaseModel):
+    items: list[Judgment]
+
+
+JUDGE_PROMPT = """Du beurteilst, ob historische Stellenanzeigen der Wiener Zeitung (1850–1950) für eine Forschungsfrage relevant sind.
+Zu jeder Frage gibt es ein Relevanzkriterium. Für jede Anzeige gibst du eine Note:
+- 2: die Anzeige erfüllt das Kriterium klar;
+- 1: teilweise oder am Rande (z. B. die richtige Berufsgruppe, aber der gefragte Aspekt fehlt; oder der Aspekt passt, aber zu einem anderen Beruf);
+- 0: nicht relevant.
+Beurteile nur den Text der Anzeige. OCR-Fehler, alte Schreibung, Abkürzungen und Bruchstücke sind normal; die Anzeige darf in einer anderen Sprache sein.
+Antworte mit einem JSON-Objekt {"items": [...]} mit genau einem Element pro Anzeige, "i" = Nummer der Anzeige."""
+
+
+def pool(runs: pd.DataFrame, questions: pd.DataFrame, docs: pd.DataFrame) -> pd.DataFrame:
+    """Distinct (question, ad) pairs found by any method, sorted so a batch shares few questions."""
+    p = runs[["query_id", "ad_id", "cluster"]].drop_duplicates().sort_values(["query_id", "ad_id"])
+    p = p.merge(questions[["query_id", "question", "criterion"]], on="query_id")
+    p = p.merge(docs[["ad_id", "raw"]], on="ad_id")
+    p["key"] = p["query_id"].astype(str) + "|" + p["ad_id"]
+    return p.reset_index(drop=True)
+
+
+def _judge_messages(batch: pd.DataFrame) -> list[dict]:
+    qs = batch.drop_duplicates("query_id")
+    head = "\n".join(f"F{r.query_id}: {r.question}\n  Kriterium: {r.criterion}" for r in qs.itertuples())
+    ads = "\n\n".join(f"{n}. [F{r.query_id}] {r.raw[:1200]}" for n, r in enumerate(batch.itertuples(), 1))
+    return [{"role": "system", "content": JUDGE_PROMPT},
+            {"role": "user", "content": f"Fragen:\n{head}\n\nAnzeigen (in eckigen Klammern die Frage):\n\n{ads}"}]
+
+
+def judge(client: DHClient, pooled: pd.DataFrame, *, batch_size: int = 25,
+          progress: bool = True) -> tuple[pd.DataFrame, dict]:
+    results, stats = run_batches(client, pooled, job="eval_judge", batch_size=batch_size, progress=progress,
+                                 build_messages=_judge_messages, result_model=JudgmentBatch,
+                                 empty_item=lambda: Judgment(i=1, grade=0))
+    out = pooled[["query_id", "ad_id", "cluster"]].copy()
+    out["grade"] = [results[k].grade if k in results else None for k in pooled["key"]]
+    return out.astype({"grade": "Int8"}), stats
+
+
+# ------------------------------------------------------------------ measures
+
+
+def scores(runs: pd.DataFrame, judgments: pd.DataFrame, questions: pd.DataFrame) -> pd.DataFrame:
+    """Per (question, method, variant): precision@10 (grade 2), nDCG@10 (gains 0/1/3), recall against all
+    ads judged relevant for the question in the pool, and whether the seed ad (or a reprint) was found."""
+    r = runs.merge(judgments[["query_id", "ad_id", "grade"]], on=["query_id", "ad_id"], how="left")
+    r["grade"] = r["grade"].fillna(0).astype(int)
+    gain = {0: 0.0, 1: 1.0, 2: 3.0}
+    # relevance per printing cluster: a method can return only one printing of an ad
+    per_cluster = (judgments.assign(grade=judgments["grade"].fillna(0).astype(int))
+                            .groupby(["query_id", "cluster"])["grade"].max().reset_index())
+    relevant = per_cluster[per_cluster["grade"] == 2].groupby("query_id").size()
+    ideal = (per_cluster.assign(g=per_cluster["grade"].map(gain))
+                        .sort_values("g", ascending=False).groupby("query_id")["g"]
+                        .apply(lambda g: sum(v / math.log2(i + 2) for i, v in enumerate(g.head(DEPTH)))))
+    seeds = questions.set_index("query_id")["seed_cluster_id"]
+    rows = []
+    for (qid, method, variant), g in r.groupby(["query_id", "method", "variant"]):
+        g = g.sort_values("rank")
+        dcg = sum(gain[x] / math.log2(rank + 1) for x, rank in zip(g["grade"], g["rank"]))
+        n_rel = int(relevant.get(qid, 0))
+        rows.append({"query_id": qid, "method": method, "variant": variant,
+                     "p@10": (g["grade"] == 2).sum() / DEPTH,
+                     "ndcg@10": dcg / ideal[qid] if ideal.get(qid, 0) > 0 else 0.0,
+                     "recall": (g["grade"] == 2).sum() / n_rel if n_rel else np.nan,
+                     "seed_found": bool((g["cluster"] == seeds[qid]).any())})
+    return pd.DataFrame(rows)
+
+
+def summary(per_query: pd.DataFrame) -> pd.DataFrame:
+    return (per_query.groupby(["method", "variant"])
+                     .agg(**{"p@10": ("p@10", "mean"), "ndcg@10": ("ndcg@10", "mean"), "recall": ("recall", "mean"),
+                             "seed_found": ("seed_found", "mean")})
+                     .round(3).sort_values("ndcg@10", ascending=False))
