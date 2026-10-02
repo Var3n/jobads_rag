@@ -91,7 +91,9 @@ def run_score(cfg, pilot: bool, models: list[str]) -> dict:
     judgments, stats = E.judge(client, pooled)
     report = {"questions": len(questions), "methods": int(runs.groupby(["method", "variant"]).ngroups),
               "pooled_pairs": len(pooled), "pooled_per_question": round(len(pooled) / len(questions), 1),
-              "judging": stats, "grades": judgments["grade"].value_counts(dropna=False).to_dict()}
+              "judging": stats,
+              # str keys: numpy int8 grades cannot be JSON keys
+              "grades": {str(k): int(v) for k, v in judgments["grade"].value_counts(dropna=False).items()}}
     if pilot:
         found_by = (runs.assign(m=runs["method"] + "/" + runs["variant"])
                         .groupby(["query_id", "ad_id"])["m"].agg(lambda m: ", ".join(sorted(m))).rename("found_by"))

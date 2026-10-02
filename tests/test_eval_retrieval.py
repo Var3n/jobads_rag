@@ -1,5 +1,6 @@
 import json
 import re
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -109,3 +110,18 @@ def test_questions_embeddings_runs_and_judging_end_to_end(cfg, monkeypatch):
     assert stats["failed_batches"] == [] and judgments["grade"].notna().all()
     s = E.summary(E.scores(runs, judgments, questions))
     assert s.loc[("bm25", "raw"), "seed_found"] == 1.0 and s.loc[("bm25", "raw"), "recall"] == 1.0
+
+    # the command itself, pilot and full: files written and the report printable as JSON
+    import hisrag.eval.__main__ as cli
+    import hisrag.llm
+    cfg["paths"]["eval_dir"] = str(Path(cfg["paths"]["cache_db"]).parent / "eval")
+    Path(cfg["paths"]["eval_dir"]).mkdir()
+    questions.to_parquet(Path(cfg["paths"]["eval_dir"]) / "queries.parquet")
+    monkeypatch.setattr(E, "documents", lambda c: docs)
+    monkeypatch.setattr(hisrag.llm, "DHClient", lambda c: client)
+    for pilot in (True, False):
+        report = cli.run_score(cfg, pilot, ["bge-m3"])
+        json.dumps(report, ensure_ascii=False, default=str)
+    out = Path(cfg["paths"]["eval_dir"])
+    assert (out / "judgments_pilot.csv").exists() and (out / "scores.parquet").exists()
+    assert "bm25/raw" in report["summary"]
