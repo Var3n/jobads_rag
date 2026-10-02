@@ -133,8 +133,15 @@ Known limits: keywords farther than the window (Quartiergeld categories, long po
    22 methods is stable across all versions** (Spearman 0.91–0.98, strict and lenient), so the judge does not decide
    the result. Pilot ranking: qwen3-8b/enriched first (strict p@10 0.37–0.44), embeddinggemma/enriched and jina v3
    close behind, bge-m3 and jina v4 lower, BM25 last (0.19–0.20); enriched beats raw; the equal-weight hybrids are
-   worse than the pure models because BM25 is weak here. Next: full `score` (300 questions, ~900 requests,
-   ~30–40 min), then notebook 06 and the choice of model for step 9.
+   worse than the pure models because BM25 is weak here.
+   **Full run (299 questions, 20,113 judged pairs, 67 per question, 1,094 requests in 11 min):** nDCG@10 / strict
+   p@10: qwen3-8b/enriched 0.662 / 0.438, qwen3-8b/raw 0.647 / 0.432, embeddinggemma/enriched 0.637 / 0.434,
+   embeddinggemma/raw 0.597 / 0.403, jina v3/enriched 0.596 / 0.393, bge-m3/enriched 0.522 / 0.354, best hybrid
+   (qwen3-8b/enriched) 0.515 / 0.328, jina v4/enriched 0.428 / 0.283, BM25/enriched 0.351 / 0.219. Enriched beats raw
+   for every model. Cost per 50,000 ads: qwen3-8b 21 min vs embeddinggemma 1.7 min (18M ads: ~5 days vs ~10 h).
+   `notebooks/06_retrieval_comparison.ipynb`: intervals, paired differences to the best method, enriched vs raw,
+   by decade and kind of ad, cost and storage at 18M, side-by-side top 5. Next: run it on the cluster, then choose
+   the model for step 9 (open: is qwen3-8b vs embeddinggemma distinguishable, and is the 8b cost worth it).
 2. Steps 9 onward as in the table.
 
 **Clean table (step 7).** `ad_clean`: 52,823 regions, 49,817 searchable, 41,024 countable (30,670 job offers, 5,896
