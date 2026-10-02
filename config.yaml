@@ -11,6 +11,7 @@ paths:
   index_dir: data/index                  # LanceDB search index (step 9)
   cache_db: data/cache/llm_cache.sqlite
   usage_log: data/logs/usage.jsonl
+  agent_log: data/logs/agent.jsonl      # every agent question with answer and tool trace (step 11)
 
 api:
   base_url: https://api.dhinfra.uni-graz.at/v1
@@ -33,6 +34,13 @@ index:
   dims: 1024
   ann_min_rows: 1000000                 # below this the vector search is exact (flat); above, an ANN index is built
   ann_index_type: IvfHnswSq             # a class of lancedb.index
+
+# Agent loop (step 11)
+agent:
+  thinking: false                       # Qwen reasoning; the pilot compares both
+  max_steps: 8                          # model requests with tools; then one last request for the answer
+  max_tokens: 8000                      # per request (reasoning counts against it)
+  timeout_s: 900
 
 # Query/passage prefixes follow each model's card. They are what step 8 compares.
 embeddings:

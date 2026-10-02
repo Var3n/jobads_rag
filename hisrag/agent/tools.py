@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 from functools import cached_property
 from typing import Any, Literal
 
@@ -169,6 +170,7 @@ class Tools:
         self.cfg = cfg or load_config()
         self.index = index or AdIndex(self.cfg, client)
         self.con = connect(self.cfg)
+        self._lock = threading.Lock()  # one DuckDB connection; the agent pilot asks questions in parallel
         self.con.execute(f"CREATE TEMP VIEW base AS SELECT *, {REQUIREMENT_TAGS_SQL} AS requirement_tags "
                          "FROM ad_clean WHERE searchable")
 
@@ -188,7 +190,8 @@ class Tools:
             return {"error": "ungültige Argumente: " + "; ".join(
                 f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in exc.errors(include_url=False))}
         try:
-            return getattr(self, name)(args)
+            with self._lock:
+                return getattr(self, name)(args)
         except (ValueError, duckdb.Error) as exc:
             return {"error": f"{type(exc).__name__}: {exc}"}
 
