@@ -45,13 +45,14 @@ os.environ.setdefault("LANCEDB_LOG", "warn,lance::dataset::scanner=error")
 TABLE = "ads"
 WORD =re.compile(r"[^\W_]+")  # words as the full-text index's simple tokenizer splits them
 
+REQUIREMENT_TAGS_SQL = "list_filter(list_transform(requirements, r -> r.dimension || ':' || r.value), x -> x IS NOT NULL)"
+
 COLUMNS_SQL = f"""
 SELECT ad_id, newspaper, year, date, decade, label, lang, countable, is_canonical,
        dup_cluster_id, dup_cluster_size, run_first_date, run_last_date, quality_warning, iiif_link,
        position_terms, position_lemmas, position_modern, position_categories, position_gender,
        requirement_dimensions,
-       list_filter(list_transform(requirements, r -> r.dimension || ':' || r.value), x -> x IS NOT NULL)
-           AS requirement_tags,
+       {REQUIREMENT_TAGS_SQL} AS requirement_tags,
        pay_min, pay_max, pay_currency, pay_standard, pay_period,
        {", ".join(f"benefit_{b}" for b in BENEFITS)}
 FROM ad_clean WHERE searchable AND newspaper = ? ORDER BY ad_id

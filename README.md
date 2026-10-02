@@ -193,6 +193,13 @@ index.keyword('"k. k. Statthalterei" krakau* -Lemberg', k=None)   # phrase, pref
 
 `notebooks/07_search_index.ipynb` tries both modes and the filters.
 
+### Step 10: agent tools
+
+`hisrag.agent.tools.Tools` holds the four tools of the agent as OpenAI function specs (`tools.specs()`) and runs a
+call from the model (`tools.call(name, arguments)`, errors come back as `{"error": …}`): `search_ads`, `get_ad`,
+`aggregate` (count / share / pay per group over countable ads) and `expand_concept` (dictionary lookup).
+`notebooks/08_agent_tools.ipynb` calls each by hand on the real tables.
+
 Query the result from Python or a notebook:
 
 ```python
@@ -209,7 +216,7 @@ query("SELECT a.text, t.lang FROM ads a JOIN ad_text t USING (ad_id) WHERE t.n_f
 | `hisrag/ingest/` | Step 1: CSV → Parquet |
 | `hisrag/normalize/` | Steps 2–6: text normalization, dedup, position/requirement dictionaries, salary |
 | `hisrag/index/` | Step 9: LanceDB search index (semantic and keyword mode, filters) |
-| `hisrag/agent/` | Steps 10–12: tools, agent loop, playground |
+| `hisrag/agent/` | Step 10: agent tools (`tools.py`); steps 11–12: agent loop, playground |
 | `hisrag/graph/` | Step 14: concept graph |
 | `hisrag/eval/` | Step 8: retrieval comparison (questions, embeddings, LLM judgments, measures) |
 | `hisrag/data.py` | Parquet storage; DuckDB views `ads` and one per derived table (`ad_text`, …) |
