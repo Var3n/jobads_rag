@@ -64,6 +64,16 @@ def test_enriched_fields_are_modern_german():
     assert E._fields(empty) == ""
 
 
+def test_question_vectors_are_stored_and_reused(cfg):
+    fake = FakeOpenAI(embedding_dim=8)
+    client = DHClient(cfg, openai_client=fake)
+    first = E.query_vectors(client, cfg, ["Köchinnen", "Lehrer"], "bge-m3")
+    again = E.query_vectors(client, cfg, ["Lehrer", "Köchinnen"], "bge-m3")
+    assert len(fake.embedding_calls) == 1 and np.allclose(first[::-1], again)
+    E.query_vectors(client, cfg, ["Lehrer", "Ärzte"], "bge-m3")
+    assert fake.embedding_calls[-1]["input"] == ["Ärzte"]  # only the new question is embedded
+
+
 def test_scores_precision_ndcg_recall_and_seed():
     runs = pd.DataFrame({"query_id": 0, "method": "m", "variant": "raw", "rank": [1, 2, 3],
                          "ad_id": ["x", "y", "z"], "cluster": ["cx", "cy", "cz"]})

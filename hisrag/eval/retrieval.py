@@ -251,6 +251,22 @@ def rrf(*rankings: np.ndarray, k: int = DEPTH) -> np.ndarray:
     return np.array(sorted(score, key=score.get, reverse=True)[:k])
 
 
+def query_vectors(client: DHClient, cfg: Config, texts: list[str], model: str) -> np.ndarray:
+    """Question embeddings, stored per model: embeddings are not in the response cache, and tiny float
+    differences between calls would change the top 10 and with it the pool to judge."""
+    path = cfg.path("embeddings_dir") / "questions" / f"{model}.parquet"
+    stored = pd.read_parquet(path) if path.exists() else pd.DataFrame(columns=["text", "vector"])
+    known = dict(zip(stored["text"], stored["vector"]))
+    missing = [t for t in dict.fromkeys(texts) if t not in known]
+    if missing:
+        for t, v in zip(missing, client.embed(missing, model, kind="query")):
+            known[t] = v
+        path.parent.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame({"text": list(known), "vector": [np.asarray(v, dtype=np.float32) for v in known.values()]}
+                     ).to_parquet(path, index=False)
+    return np.stack([np.asarray(known[t], dtype=np.float32) for t in texts])
+
+
 def run_methods(questions: pd.DataFrame, docs: pd.DataFrame, cfg: Config, client: DHClient,
                 models: list[str], progress: bool = True) -> pd.DataFrame:
     """One row per (question, method, variant, rank) with the ad found there (top DEPTH)."""
@@ -268,7 +284,7 @@ def run_methods(questions: pd.DataFrame, docs: pd.DataFrame, cfg: Config, client
                     print(f"  skip {v}/{model}: not fully embedded", flush=True)
                 continue
             if qv is None:
-                qv = client.embed(questions["question"].tolist(), model, kind="query")
+                qv = query_vectors(client, cfg, questions["question"].tolist(), model)
             runs[f"{model}/{v}"] = dense_search(vectors, qv, hybrid_depth)
             runs[f"hybrid:{model}/{v}"] = [rrf(a, b) for a, b in zip(runs[f"bm25/{v}"], runs[f"{model}/{v}"])]
     ad_ids, clusters = docs["ad_id"].to_numpy(), docs["dup_cluster_id"].to_numpy()
@@ -303,8 +319,9 @@ class JudgmentBatch(BaseModel):
 JUDGE_PROMPT = """Du beurteilst, ob historische Stellenanzeigen der Wiener Zeitung (1850–1950) für eine Forschungsfrage relevant sind.
 Zu jeder Frage gibt es ein Relevanzkriterium. Für jede Anzeige gibst du eine Note:
 - 2: die Anzeige erfüllt das Kriterium klar;
-- 1: teilweise oder am Rande (z. B. die richtige Berufsgruppe, aber der gefragte Aspekt fehlt; oder der Aspekt passt, aber zu einem anderen Beruf);
+- 1: teilweise oder am Rande. Immer 1 (nicht 0), wenn der Beruf passt, aber der gefragte Aspekt fehlt, oder wenn der Aspekt passt, aber zu einem verwandten Beruf;
 - 0: nicht relevant.
+Frage und Kriterium verwenden heutige Begriffe, die Anzeigen historische: zeitgenössische Entsprechungen zählen als Erfüllung (eine Köchin, Magd oder ein Stubenmädchen ist eine Hausgehilfin; ein Commis ist ein Handelsangestellter; "mit guten Zeugnissen versehen" sind gute Zeugnisse).
 Beurteile nur den Text der Anzeige. OCR-Fehler, alte Schreibung, Abkürzungen und Bruchstücke sind normal; die Anzeige darf in einer anderen Sprache sein.
 Antworte mit einem JSON-Objekt {"items": [...]} mit genau einem Element pro Anzeige, "i" = Nummer der Anzeige."""
 
