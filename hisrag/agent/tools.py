@@ -31,8 +31,7 @@ from hisrag.normalize.positions import CATEGORIES
 from hisrag.normalize.text import fold_spelling
 
 LABELS = ("job_offer", "job_search", "service_offer", "vermittlung")
-SNIPPET_CHARS = 600
-FULL_TEXT_CHARS = 4000
+FULL_TEXT_CHARS = 4000  # get_ad's safeguard; the longest ad has ~2,400
 MAX_GROUPS = 40       # largest groups kept for lemmas, values, …; years and decades are always complete
 COUNTABLE_NOTE = ("Gezählt werden nur zählbare Anzeigen: je Anzeige ein Abdruck (Wiederholungen nicht), ohne Texte, "
                   "die die Nachkorrektur stark verändert oder erfunden hat.")
@@ -137,7 +136,7 @@ def json_schema(model: type[BaseModel]) -> dict:
 
 
 SPECS = {
-    "search_ads": (SearchArgs, "Sucht Anzeigen und liefert kurze Treffer (ID, Datum, Art, Beruf, Textanfang). Jeder "
+    "search_ads": (SearchArgs, "Sucht Anzeigen und liefert die Treffer mit vollständigem Text (ID, Datum, Art, Beruf, Text). Jeder "
                                "Treffer ist eine Anzeige; Wiederholungsabdrucke sind zusammengefasst (printings). Im "
                                "Modus keyword wird auch die Gesamtzahl der Treffer gemeldet."),
     "get_ad": (GetAdArgs, "Liefert vollständige Anzeigen: Text, Berufe, Anforderungen, Lohn, Abdrucke, Link zum Bild "
@@ -212,9 +211,8 @@ class Tools:
 
     @staticmethod
     def _hit(r) -> dict:
-        text = r.text if len(r.text) <= SNIPPET_CHARS else r.text[:SNIPPET_CHARS] + " …"
         hit = {"ad_id": r.ad_id, "date": _date(r.date), "label": r.label, "positions": _list(r.position_modern),
-               "text": text, "printings": int(r.dup_cluster_size)}
+               "text": r.text, "printings": int(r.dup_cluster_size)}
         if isinstance(r.quality_warning, str):
             hit["warning"] = r.quality_warning
         return hit

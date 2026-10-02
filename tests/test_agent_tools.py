@@ -88,3 +88,11 @@ def test_expand_concept(tools):
     r = tools.call("expand_concept", {"term": "Haushalt"})
     assert r["categories"] == ["Haushalt/Dienstboten"]
     assert "Kein Eintrag" in tools.call("expand_concept", {"term": "Astronaut"})["hint"]
+
+
+def test_search_ads_returns_the_full_text(tools, monkeypatch):
+    import pandas as pd
+    long = pd.DataFrame([{"ad_id": "x", "date": None, "label": "job_offer", "position_modern": None,
+                          "text": "Köchin gesucht. " * 200, "dup_cluster_size": 1, "quality_warning": None}])
+    monkeypatch.setattr(tools.index, "semantic", lambda *a, **k: long)
+    assert tools.call("search_ads", {"query": "Köchin"})["results"][0]["text"] == "Köchin gesucht. " * 200

@@ -190,7 +190,8 @@ model's call; arguments are validated with pydantic, and bad arguments or failur
 German message) so the model can correct itself. Specs are plain JSON schema (no anyOf/null, $ref or titles; enums for
 labels, the 16 categories and the benefits), descriptions in German; ~2,500 tokens per request.
 * `search_ads(query, mode semantic|keyword, filters, k ≤ 25)`: hits with ad_id, date, label, modern positions, text
-  (first 600 characters), printings, warning; keyword mode adds `total_matches`/`total_countable` and the prefix
+  (full: median 210, 99 % ≤ 779, longest ~2,400 characters; a cut-off hid pay or conditions at the end of long ads),
+  printings, warning; keyword mode adds `total_matches`/`total_countable` and the prefix
   expansions. ~1,000–1,300 tokens for 10 hits.
 * `get_ad(ad_ids ≤ 10)`: full record (text up to 4,000 characters, historical and modern positions as two lists:
   `ad_clean` sorts them separately, so they are not pairs; requirements, pay, all amounts, benefits, printings,
