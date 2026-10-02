@@ -8,6 +8,7 @@ paths:
   derived_dir: data/derived              # one partitioned table per pipeline step, keyed by ad_id
   embeddings_dir: data/embeddings        # vectors per text variant and model (outside derived: no DuckDB view)
   eval_dir: data/eval                    # test questions and retrieval results (step 8)
+  index_dir: data/index                  # LanceDB search index (step 9)
   cache_db: data/cache/llm_cache.sqlite
   usage_log: data/logs/usage.jsonl
 
@@ -24,6 +25,14 @@ llm:
   model: qwen3.5-397b
   context_tokens: 256000
   structured_output: json_schema        # json_schema | prompt | auto  (00_api_check: json_schema works)
+
+# Search index (step 9): the step-8 winner, cut to its first `dims` dimensions and renormalized.
+index:
+  model: qwen3-embedding-8b
+  variant: enriched                     # ad + "Stelle/Anforderungen/Lohn" (hisrag.eval.retrieval.documents)
+  dims: 1024
+  ann_min_rows: 1000000                 # below this the vector search is exact (flat); above, an ANN index is built
+  ann_index_type: IvfHnswSq             # a class of lancedb.index
 
 # Query/passage prefixes follow each model's card. They are what step 8 compares.
 embeddings:

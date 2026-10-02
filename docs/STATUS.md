@@ -1,6 +1,6 @@
 # Project status (proof of concept)
 
-Last updated: 2026-10-02, step 8 done, step 9 next. Read this first when picking the project up; `README.md` has setup and commands.
+Last updated: 2026-10-02, step 9 code done (tested locally), cluster build and check pending. Read this first when picking the project up; `README.md` has setup and commands.
 
 ## Goal and constraints
 
@@ -46,7 +46,7 @@ Consequences of the scale (120 requests/min, ~10 tokens/s per request):
 | 6 | Salary parsing | done | `ad_salary` (22,639 spans: 21,667 by rules, 289 by LLM), `ad_pay` (9,722 ads with main pay, benefits per ad) |
 | 7 | Final clean table + sanity plots | done | `ad_clean`: 41,024 countable ads; `notebooks/05_clean_table.ipynb` |
 | 8 | Retrieval comparison | done | 299 LLM research questions, pooled LLM judgments; winner qwen3-embedding-8b on enriched text, 1,024 dims (nDCG@10 0.654) |
-| 9 | Index | **next** | LanceDB with vectors, keyword index and filter columns |
+| 9 | Index | **code done, cluster run pending** | `data/index/` (LanceDB): semantic + keyword mode, filters; local stand-in: 49,817 ads, 48 s, 222 MB |
 | 10 | Agent tools | open | `search_ads`, `get_ad`, `aggregate` (SQL templates), `expand_concept` |
 | 11 | Agent loop | open | Qwen tool calling (tested in step 0), cites ad IDs, always reports how many ads an answer rests on |
 | 12 | Playground notebook | open | answer, tool trace, cited clippings (IIIF), rating widget → interaction log |
@@ -151,24 +151,46 @@ embeddinggemma-300m is the fallback (same storage at 768 dims, weaker on job sea
 *Files on the cluster.* `data/eval/` (queries, runs, judgments, scores parquet), `data/embeddings/<variant>/<model>/`
 (full 4096-dim qwen vectors for raw and enriched; all five models), `data/embeddings/questions/`.
 
+**Search index (step 9, `hisrag/index/`, `notebooks/07_search_index.ipynb`).**
+*Table.* One LanceDB table `ads` in `data/index/` (dependency `lancedb>=0.39`), one row per searchable ad (49,817):
+filter columns of `ad_clean` (newspaper, year, date, decade, label, lang, `countable`, `is_canonical`, cluster id/size and
+run dates, quality warning, position terms/lemmas/modern/categories/gender, requirement dimensions, `requirement_tags`
+= "dimension:value" strings, pay fields, benefit flags), `iiif_link`, `text` (heading + `text_norm`, the step-8 `raw`
+variant), `text_folded` (`fold_spelling(text)`) and `vector` (settings under `index:` in `config.yaml`). Built per
+newspaper (its rows are deleted and re-added). Vectors are looked up by `ad_id` in the step-8 store
+(`data/embeddings/enriched/qwen3-embedding-8b/`, cut to 1,024 dims while reading); ads without a stored vector are
+embedded into `…/newspaper=<name>/chunk-*.parquet` next to it, so new newspapers do not disturb the step-8 chunks.
+Indexes: full-text on `text_folded`, scalar indexes on the common filters, an ANN vector index (`IvfHnswSq`, cosine)
+only from `index.ann_min_rows` = 1M rows on; below that the vector search is exact, i.e. identical to the evaluation.
+*Keyword mode, decided by testing on the real local texts:* LanceDB full-text (BM25) on the folded text, **unstemmed**,
+with positions; the query is folded the same way. The German stemmer was rejected: it merges Wirtschafterin with
+Wirtschaft/Wirtschafter (361 vs 201 ads). The old Python `BM25` does not scale to 18M. LanceDB's query string has no
+AND and no wildcards, so `search.parse_keywords` builds the query itself: all words must occur, `"…"` is a phrase,
+`word*` is expanded from a word list stored per newspaper (`data/index/vocab/<newspaper>.parquet`, up to 100 most
+frequent words; the expansion is returned in `hits.attrs["expanded"]`), `-word` excludes. Inflected forms need `*`
+("Krakau" misses "Krakauer"). On the real texts: Wirthschafterin 144 ads (one per cluster), Rothschild 6,
+"k. k. Statthalterei" Lemberg 8, krakau* 128, 15–170 ms per query.
+*API.* `AdIndex(cfg).semantic(question, Filters(...), k)` / `.keyword(words, Filters(...), k)`; both return one ad per
+printing cluster (fetch more than k, widen until k clusters), `score` = cosine similarity or BM25. `Filters` holds
+structured fields (years, labels, categories, requirement tags, pay, benefits, `countable_only`) plus raw `where` SQL;
+string values are quoted. The question embedding is not cached (the step-8 cache was only for reproducible pools).
+*Local stand-in* (real texts of steps 1–3, fake 1,024-dim vectors): build 48 s, 222 MB, 4.7 KB per ad (almost all
+vector) → ~84 GB at 18M without an ANN index; exact filtered vector search ~60 ms at 50k.
+
 ## Open items (in order)
 
-1. **Step 9: index.** Plan agreed in outline, not started:
-   * LanceDB table (new dependency `lancedb`) built from `ad_clean` WHERE `searchable`, one row per ad: `ad_id`,
-     `vector` = qwen3-embedding-8b on the `enriched` text cut to 1,024 dims and renormalized (reuse
-     `hisrag.eval.retrieval.documents()`, `load_vectors()`, `truncate()`; the stored 4096-dim vectors in
-     `data/embeddings/enriched/qwen3-embedding-8b/` can be reused, no new embedding for the Wiener Zeitung).
-   * Filter columns from `ad_clean`: newspaper, year, decade, date, label, `countable`, `is_canonical`,
-     `dup_cluster_id`, lang, position categories/lemmas, `position_gender`, requirement dimensions, pay fields, benefit
-     flags, quality warning; plus the display text and `iiif_link`.
-   * Keyword search as a separate mode: LanceDB full-text index or the existing `BM25` with `fold_spelling`
-     (historical spellings must match, e.g. Wirthschafterin/Wirtschafterin); decide by testing exact names/places.
-   * Query side: embed the question with the qwen query prefix (config) and cut to 1,024 dims; one result per printing
-     cluster (`dup_cluster_id`), as in the evaluation.
-   * Per partition (newspaper) so more newspapers can be added; check index build time and size for the scale test.
-   * Tests locally with FakeOpenAI vectors; on the cluster a small notebook to try queries (e.g. the step-8 questions)
-     before the agent tools of step 10.
-2. Steps 10 onward as in the table.
+1. **Step 9 on the cluster.** `git pull`, then `pip install -e .` in the `hisrag` env (new dependency `lancedb`), then:
+   * `python -m hisrag.index build`: should report 49,817 rows and **no** `embedding` entry (all vectors come from
+     the step-8 store); paste the JSON (times, size).
+   * `python -m hisrag.index check`: semantic search through the index for the 299 step-8 questions must match the
+     evaluation's `qwen3-embedding-8b@1024/enriched` runs (`mean_overlap_with_eval_top10` ≈ 1.0, small gaps only from
+     ties); also times both modes and one live question embedding. Paste the JSON.
+   * Run `notebooks/07_search_index.ipynb` (generated by `scripts/notebooks/make_nb07.py`) and look at whether the
+     results and filters make sense; the requirement-tag cell lists the actual `sprachkenntnisse:` values.
+2. **Step 10: agent tools** on top of `AdIndex`: `search_ads` (semantic/keyword + `Filters`), `get_ad` (lookup by ID in
+   `ad_clean`), `aggregate` (SQL templates over `ad_clean`, counts with `countable`), `expand_concept`.
+3. Steps 11 onward as in the table. For step 15: index build time per newspaper, ANN build time and recall vs exact
+   search, and that `build` re-reads all of `ad_clean` through `documents()` per newspaper (fine for a few, slow for 29).
 
 Smaller known issues: one hallucinated company name from context in step 5; single-occurrence OCR garbles in step 4
 ("Applent", "Praschneiderin") are mapped with guesses; the generic "Lehrling" category depends on its example.
@@ -178,7 +200,7 @@ Smaller known issues: one hallucinated company name from context in step 5; sing
 * Windows machine, Git Bash and PowerShell. Run Python as `.venv/Scripts/python` (a bare `python` can hang on the
   Windows Store alias). Long Python edits with quotes or backslashes break inside bash heredocs (backslashes are
   swallowed): use the Edit tool, or write the script to the scratchpad with the Write tool and run it.
-* Notebooks 04–06 are generated by `scripts/notebooks/make_nb0X.py` (run from the repo root; they overwrite the
+* Notebooks 04–07 are generated by `scripts/notebooks/make_nb0X.py` (run from the repo root; they overwrite the
   notebook). Before pushing, notebooks are executed locally cell by cell with stand-in tables where the real ones only
   exist on the cluster: a local `ad_clean` built from the real steps 1–3 and 6 (salary with a fake LLM) plus random
   stand-in positions/requirements, and fake eval files from `FakeOpenAI` (random vectors and grades). Only the

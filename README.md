@@ -173,6 +173,26 @@ python -m hisrag.eval score                     # all questions: runs, judgments
 python -m hisrag.eval score --extend --models qwen3-embedding-8b@1024   # add methods; judges only new pairs
 ```
 
+### Step 9: search index
+
+One LanceDB table (`data/index/`) with one row per searchable ad: the qwen3-embedding-8b vector of the enriched text
+cut to 1,024 dims (taken from the step-8 store; ads without one are embedded), the text, a spelling-folded copy with a
+full-text index, and the filter columns of `ad_clean`. Rebuilt per newspaper. Settings under `index:` in `config.yaml`.
+
+```bash
+python -m hisrag.index build                    # all newspapers (or --newspapers wrz,…); prints times and size
+python -m hisrag.index check                    # semantic search must reproduce the step-8 runs; times both modes
+```
+
+```python
+from hisrag.index import AdIndex, Filters
+index = AdIndex()
+index.semantic("Welche Sprachkenntnisse wurden von Gouvernanten verlangt?", Filters(year_from=1850, year_to=1879))
+index.keyword('"k. k. Statthalterei" krakau* -Lemberg', k=None)   # phrase, prefix, exclusion; k=None: all matches
+```
+
+`notebooks/07_search_index.ipynb` tries both modes and the filters.
+
 Query the result from Python or a notebook:
 
 ```python
@@ -188,10 +208,10 @@ query("SELECT a.text, t.lang FROM ads a JOIN ad_text t USING (ad_id) WHERE t.n_f
 | `hisrag/llm/` | API client: rate limiting, response cache, usage log, structured output, embeddings; `FakeOpenAI` for offline tests |
 | `hisrag/ingest/` | Step 1: CSV → Parquet |
 | `hisrag/normalize/` | Steps 2–6: text normalization, dedup, position/requirement dictionaries, salary |
-| `hisrag/index/` | Steps 8–9: embeddings, hybrid search index |
+| `hisrag/index/` | Step 9: LanceDB search index (semantic and keyword mode, filters) |
 | `hisrag/agent/` | Steps 10–12: tools, agent loop, playground |
 | `hisrag/graph/` | Step 14: concept graph |
-| `hisrag/eval/` | Synthetic retrieval checks, citation checker, interaction log |
+| `hisrag/eval/` | Step 8: retrieval comparison (questions, embeddings, LLM judgments, measures) |
 | `hisrag/data.py` | Parquet storage; DuckDB views `ads` and one per derived table (`ad_text`, …) |
 | `notebooks/` | Notebooks to run on the cluster; they only call package code |
 

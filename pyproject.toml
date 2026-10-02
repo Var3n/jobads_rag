@@ -19,6 +19,7 @@ dependencies = [
     "requests>=2.31",
     "rapidfuzz>=3.6",
     "matplotlib>=3.8",
+    "lancedb>=0.39",
 ]
 
 [project.optional-dependencies]
