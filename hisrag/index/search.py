@@ -158,7 +158,7 @@ class AdIndex:
             s = self.table.search(v, vector_column_name="vector").metric("cosine")
             return s.where(filters.sql(), prefilter=True) if filters and filters.sql() else s
 
-        out = self._distinct(fetch, k)
+        out = self._distinct(fetch, k, ["_distance"])  # named, or lance warns on every search
         out.insert(1, "score", 1 - out.pop("_distance"))
         return out
 
@@ -206,12 +206,12 @@ class AdIndex:
         out.attrs["expanded"] = expanded
         return out
 
-    def _distinct(self, fetch, k: int | None) -> pd.DataFrame:
+    def _distinct(self, fetch, k: int | None, extra: list[str] = ()) -> pd.DataFrame:
         """Top k with one ad per printing cluster: fetch more than k and widen until k clusters are found."""
         n_rows = self.table.count_rows()
         limit = n_rows if k is None else max(4 * k, 40)
         while True:
-            hits = fetch().limit(limit).select(DISPLAY).to_pandas()
+            hits = fetch().limit(limit).select(DISPLAY + list(extra)).to_pandas()
             distinct = hits.drop_duplicates("dup_cluster_id")
             if k is None or len(distinct) >= k or len(hits) < limit or limit >= n_rows:
                 return distinct.head(k).reset_index(drop=True) if k else distinct.reset_index(drop=True)
