@@ -19,6 +19,7 @@ Indexes, rebuilt after every build over the whole table:
 from __future__ import annotations
 
 import math
+import os
 import re
 import time
 from collections import Counter
@@ -37,8 +38,12 @@ from hisrag.eval import retrieval as E
 from hisrag.normalize.clean import BENEFITS
 from hisrag.normalize.text import fold_spelling
 
+# Read by lancedb's Rust logger when it is first imported. Full-text search warns on every query that `_score`
+# is not selected, but selecting it is an error (lancedb 0.39) and the switch it names is not in Python.
+os.environ.setdefault("LANCEDB_LOG", "warn,lance::dataset::scanner=error")
+
 TABLE = "ads"
-WORD = re.compile(r"[^\W_]+")  # words as the full-text index's simple tokenizer splits them
+WORD =re.compile(r"[^\W_]+")  # words as the full-text index's simple tokenizer splits them
 
 COLUMNS_SQL = f"""
 SELECT ad_id, newspaper, year, date, decade, label, lang, countable, is_canonical,

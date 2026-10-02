@@ -178,8 +178,10 @@ string values are quoted. The question embedding is not cached (the step-8 cache
 224 MB, 4.7 KB per ad (almost all vector) → ~85 GB at 18M without an ANN index. `check`: through the index the 299
 step-8 questions give the evaluation's top 10 (mean overlap 1.0, 298 identical, one differs by a tie), so the step-8
 numbers hold for the index. Exact semantic search 90 ms, with the live question embedding 217 ms; keyword 15 ms
-(Köchin 171 ads, Wirthschafterin 144, "k. k. Statthalterei" 342). The lance warning "did not include `_distance`"
-is silenced by selecting `_distance` explicitly (selecting `_score` in full-text search is an error, and not needed).
+(Köchin 171 ads, Wirthschafterin 144, "k. k. Statthalterei" 342). The lance warning "did not include `_distance`/`_score`"
+on every search: semantic search selects `_distance` explicitly; for full-text search selecting `_score` is an error
+in lancedb 0.39, so `hisrag/index/build.py` sets `LANCEDB_LOG=warn,lance::dataset::scanner=error` before lancedb is
+imported (remove once lancedb exposes `disable_scoring_autoprojection` in Python).
 
 ## Open items (in order)
 
