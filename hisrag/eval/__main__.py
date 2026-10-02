@@ -98,7 +98,7 @@ def run_score(cfg, pilot: bool, models: list[str]) -> dict:
         found_by = (runs.assign(m=runs["method"] + "/" + runs["variant"])
                         .groupby(["query_id", "ad_id"])["m"].agg(lambda m: ", ".join(sorted(m))).rename("found_by"))
         review = (pooled.merge(judgments, on=["query_id", "ad_id"]).join(found_by, on=["query_id", "ad_id"])
-                        [["query_id", "question", "criterion", "grade", "raw", "found_by"]])
+                        [["query_id", "question", "criterion", "grade", "reason", "raw", "found_by"]])
         review.to_csv(out / "judgments_pilot.csv", index=False, encoding="utf-8-sig")
         report["review_csv"] = str(out / "judgments_pilot.csv")
     else:

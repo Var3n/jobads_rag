@@ -74,6 +74,23 @@ def test_question_vectors_are_stored_and_reused(cfg):
     assert fake.embedding_calls[-1]["input"] == ["Ärzte"]  # only the new question is embedded
 
 
+def test_judge_sends_one_question_per_request(cfg):
+    seen = []
+
+    def chat(payload):
+        user = payload["messages"][-1]["content"]
+        seen.append(re.search(r"^Frage: (.*)$", user, re.M).group(1))
+        assert user.count("Frage:") == 1
+        ads = re.findall(r"^(\d+)\. ", user, re.M)
+        return json.dumps({"items": [{"i": int(i), "reason": "passt", "grade": 1} for i in ads]})
+    pooled = pd.DataFrame({"query_id": [0, 0, 0, 1, 1], "ad_id": list("abcde"), "cluster": list("abcde"),
+                           "question": ["Köchinnen"] * 3 + ["Lehrer"] * 2, "criterion": "x", "raw": "Text"})
+    pooled["key"] = pooled["query_id"].astype(str) + "|" + pooled["ad_id"]
+    judgments, _ = E.judge(DHClient(cfg, openai_client=FakeOpenAI(chat)), pooled, batch_size=2, progress=False)
+    assert sorted(seen) == ["Köchinnen", "Köchinnen", "Lehrer"]       # 3 + 2 ads, batches of 2, never mixed
+    assert judgments["grade"].tolist() == [1] * 5 and judgments["reason"].eq("passt").all()
+
+
 def test_scores_precision_ndcg_recall_and_seed():
     runs = pd.DataFrame({"query_id": 0, "method": "m", "variant": "raw", "rank": [1, 2, 3],
                          "ad_id": ["x", "y", "z"], "cluster": ["cx", "cy", "cz"]})
@@ -90,9 +107,11 @@ def test_scores_precision_ndcg_recall_and_seed():
 def test_questions_embeddings_runs_and_judging_end_to_end(cfg, monkeypatch):
     def chat(payload):
         user = payload["messages"][-1]["content"]
-        if user.startswith("Fragen:"):   # judge: the reprint pair and the Wirtschafterin ads are relevant
-            ads = re.findall(r"^(\d+)\. \[F\d+\] (.*)$", user, re.M)
-            return json.dumps({"items": [{"i": int(i), "grade": 2 if "Wirthschafterin" in t else 0} for i, t in ads]})
+        if user.startswith("Frage:"):   # judge: the reprint pair and the Wirtschafterin ads are relevant
+            assert user.count("Frage:") == 1                  # one question per request
+            ads = re.findall(r"^(\d+)\. (.*)$", user, re.M)
+            return json.dumps({"items": [{"i": int(i), "reason": "Wirtschafterin" if "Wirthschafterin" in t else "anderer Beruf",
+                                          "grade": 2 if "Wirthschafterin" in t else 0} for i, t in ads]})
         n = len(re.findall(r"^\d+\. \(", user, re.M))
         return json.dumps({"items": [{"i": i, "question": "Stellen für Wirtschafterinnen in herrschaftlichen Haushalten",
                                       "criterion": "Die Anzeige sucht eine Wirtschafterin."} for i in range(1, n + 1)]})

@@ -309,6 +309,7 @@ def run_methods(questions: pd.DataFrame, docs: pd.DataFrame, cfg: Config, client
 
 class Judgment(BaseModel):
     i: int
+    reason: str  # before the grade, so the model states what it sees before it grades
     grade: Literal[0, 1, 2]
 
 
@@ -317,7 +318,7 @@ class JudgmentBatch(BaseModel):
 
 
 JUDGE_PROMPT = """Du beurteilst, ob historische Stellenanzeigen der Wiener Zeitung (1850–1950) für eine Forschungsfrage relevant sind.
-Zu jeder Frage gibt es ein Relevanzkriterium. Für jede Anzeige gibst du eine Note:
+Zur Frage gibt es ein Relevanzkriterium. Für jede Anzeige schreibst du zuerst "reason": höchstens 12 Wörter dazu, was in der Anzeige für oder gegen das Kriterium spricht; dann "grade":
 - 2: die Anzeige erfüllt das Kriterium klar;
 - 1: teilweise oder am Rande. Immer 1 (nicht 0), wenn der Beruf passt, aber der gefragte Aspekt fehlt, oder wenn der Aspekt passt, aber zu einem verwandten Beruf;
 - 0: nicht relevant.
@@ -327,7 +328,7 @@ Antworte mit einem JSON-Objekt {"items": [...]} mit genau einem Element pro Anze
 
 
 def pool(runs: pd.DataFrame, questions: pd.DataFrame, docs: pd.DataFrame) -> pd.DataFrame:
-    """Distinct (question, ad) pairs found by any method, sorted so a batch shares few questions."""
+    """Distinct (question, ad) pairs found by any method, sorted by question."""
     p = runs[["query_id", "ad_id", "cluster"]].drop_duplicates().sort_values(["query_id", "ad_id"])
     p = p.merge(questions[["query_id", "question", "criterion"]], on="query_id")
     p = p.merge(docs[["ad_id", "raw"]], on="ad_id")
@@ -336,20 +337,22 @@ def pool(runs: pd.DataFrame, questions: pd.DataFrame, docs: pd.DataFrame) -> pd.
 
 
 def _judge_messages(batch: pd.DataFrame) -> list[dict]:
-    qs = batch.drop_duplicates("query_id")
-    head = "\n".join(f"F{r.query_id}: {r.question}\n  Kriterium: {r.criterion}" for r in qs.itertuples())
-    ads = "\n\n".join(f"{n}. [F{r.query_id}] {r.raw[:1200]}" for n, r in enumerate(batch.itertuples(), 1))
+    q = batch.iloc[0]  # one question per batch (judge() groups by question)
+    ads = "\n\n".join(f"{n}. {r.raw[:1200]}" for n, r in enumerate(batch.itertuples(), 1))
     return [{"role": "system", "content": JUDGE_PROMPT},
-            {"role": "user", "content": f"Fragen:\n{head}\n\nAnzeigen (in eckigen Klammern die Frage):\n\n{ads}"}]
+            {"role": "user", "content": f"Frage: {q['question']}\nKriterium: {q['criterion']}\n\nAnzeigen:\n\n{ads}"}]
 
 
-def judge(client: DHClient, pooled: pd.DataFrame, *, batch_size: int = 25,
+def judge(client: DHClient, pooled: pd.DataFrame, *, batch_size: int = 21,
           progress: bool = True) -> tuple[pd.DataFrame, dict]:
+    """One question per request: in the pilot a request mixing questions, or simply a long one, could
+    lose track and grade a whole run of fitting ads 0."""
     results, stats = run_batches(client, pooled, job="eval_judge", batch_size=batch_size, progress=progress,
-                                 build_messages=_judge_messages, result_model=JudgmentBatch,
-                                 empty_item=lambda: Judgment(i=1, grade=0))
+                                 group_by="query_id", build_messages=_judge_messages, result_model=JudgmentBatch,
+                                 empty_item=lambda: Judgment(i=1, reason="", grade=0))
     out = pooled[["query_id", "ad_id", "cluster"]].copy()
     out["grade"] = [results[k].grade if k in results else None for k in pooled["key"]]
+    out["reason"] = [results[k].reason if k in results else None for k in pooled["key"]]
     return out.astype({"grade": "Int8"}), stats
 
 

@@ -62,9 +62,11 @@ def normalize_batch(client: DHClient, batch: pd.DataFrame, *,
 
 
 def run_batches(client: DHClient, rows: pd.DataFrame, *, job: str, batch_size: int,
-                progress: bool = True, **batch_kwargs) -> tuple[dict[str, Item], dict]:
-    """Run normalize_batch over all rows in parallel; failures are reported, not raised."""
-    batches = [rows.iloc[i:i + batch_size] for i in range(0, len(rows), batch_size)]
+                progress: bool = True, group_by: str | None = None, **batch_kwargs) -> tuple[dict[str, Item], dict]:
+    """Run normalize_batch over all rows in parallel; failures are reported, not raised.
+    With `group_by`, a batch never mixes rows of different values of that column."""
+    groups = [g for _, g in rows.groupby(group_by, sort=False)] if group_by else [rows]
+    batches = [g.iloc[i:i + batch_size] for g in groups for i in range(0, len(g), batch_size)]
     t0 = time.monotonic()
     with client.job_scope(job):
         parts = client.map(lambda b: normalize_batch(client, b, **batch_kwargs), batches,
