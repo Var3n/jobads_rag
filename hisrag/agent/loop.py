@@ -30,18 +30,26 @@ Die Datenbank:
 
 Vorgehen:
 - Berufe und Anforderungen zuerst mit expand_concept nachschlagen, dann mit den gefundenen Lemmata, Tags und Berufsfeldern filtern. Auch verwandte historische Bezeichnungen nachschlagen (z. B. für Hausangestellte: Köchin, Magd, Stubenmädchen).
-- search_ads im Modus semantic für Themen und Fragen, im Modus keyword für Namen, Orte und feste Begriffe.
+- Unabhängige Aufrufe in derselben Runde stellen (z. B. mehrere expand_concept auf einmal).
+- search_ads im Modus semantic für Themen und Fragen, im Modus keyword für Namen, Orte und feste Begriffe. Im Modus keyword nur die kennzeichnenden Wörter angeben (Rothschild, nicht Haus Rothschild); Varianten mit OR verbinden, andere Wortformen mit wort*. Ergibt eine Suche 0 Treffer, die Suche lockern (weniger Wörter, wort*, OR, weniger Filter, Modus semantic), bevor du schreibst, dass etwas nicht vorkommt.
 - Zahlen, Anteile, Entwicklungen und Löhne nur mit aggregate ermitteln, nie aus Suchtreffern hochrechnen. Ein Anteil braucht eine passende Grundmenge (z. B. alle Stellenangebote desselben Jahrzehnts).
+- Kleine Zahlen prüfen: Die Lemmata sind eng (die meisten Lehrerstellen haben das Lemma Lehrer, die Schulart steht nur im Text). Ergibt ein Filter wenige Anzeigen, mit einem breiteren Filter gegenprüfen (z. B. Lemma Lehrer und keyword Volksschul*), bevor du die Zahl als vollständig darstellst.
+- Anforderungs-Tags genau lesen: unterrichtssprache ist die Sprache einer Schule, keine Anforderung an die Person; sprachkenntnisse sind Kenntnisse der Person. Getrennt berichten, nicht zusammenzählen.
+- Die Art der Anzeige beachten: Stellengesuche zeigen, wie sich Suchende beschreiben, nicht, was Arbeitgeber erwarten.
 - get_ad für die Einzelheiten von Anzeigen, die du zitierst oder genauer prüfst.
 - Zeiträume der Frage als year_from/year_to filtern.
 
 Antwort:
 - Belege jede Aussage über Anzeigen mit ihren IDs in eckigen Klammern, z. B. [wrz_18620412_017_region_0162]. Nur IDs, die ein Tool geliefert hat.
-- Sage immer, worauf die Antwort beruht: bei Zahlen die Zahl der gezählten Anzeigen (n_ads aus aggregate), bei Beispielen, wie viele Anzeigen du gelesen hast. Beispiele sind Beispiele, keine repräsentative Auswahl.
+- Jede Zahl muss aus einem Tool-Ergebnis stammen. Beschreibe keine Tool-Aufrufe, die du nicht gemacht hast.
+- Sage immer, worauf die Antwort beruht: bei Zahlen die Zahl der gezählten Anzeigen (n_ads aus aggregate), bei Beispielen, wie viele Anzeigen du gelesen hast. Beispiele sind Beispiele, keine repräsentative Auswahl: "häufig", "viele" oder "meist" nur mit Zahlen aus aggregate, sonst "in X der gelesenen Anzeigen".
 - Bezeichnungen der Quelle bleiben stehen (z. B. Böhmisch, Ruthenisch, Commis), nur die Schreibung wird modernisiert; wörtliche Zitate in Anführungszeichen mit der Schreibung der Quelle.
 - Wenn die Daten die Frage nicht oder nur teilweise beantworten, sage das deutlich.
 - Knapp und gegliedert: zuerst die Antwort, dann Belege und Einschränkungen."""
 
+PROMPT_VERSION = "v2"  # v1: pilot 2026-10-02; v2: keyword use, small counts, tag types, kinds of ad, no numbers without tools
+USE_TOOLS = ("Du hast noch kein Tool aufgerufen. Die Antwort muss auf den Daten beruhen: rufe zuerst die passenden "
+             "Tools auf.")
 FINAL_NUDGE = ("Du hast die höchste Zahl an Tool-Aufrufen erreicht. Beantworte die Frage jetzt ohne weitere Tools "
                "mit dem, was du gefunden hast, und sage, was offen bleibt.")
 
@@ -54,6 +62,7 @@ class Answer:
     answer: str
     trace: list[dict] = field(default_factory=list)  # one entry per tool call
     steps: int = 0                                     # model requests
+    reasoning_chars: int = 0                           # length of Qwen's reasoning over all requests
     stopped: str = "answer"                            # answer | max_steps | error
     cited: list[str] = field(default_factory=list)
     unknown_ids: list[str] = field(default_factory=list)  # cited but returned by no tool
@@ -92,7 +101,7 @@ class Agent:
         thinking = a_cfg["thinking"] if thinking is None else thinking
         max_steps = max_steps or a_cfg["max_steps"]
         settings = {"model": self.client.model, "thinking": thinking, "max_steps": max_steps,
-                    "prompt_chars": len(SYSTEM_PROMPT)}
+                    "prompt_version": PROMPT_VERSION}
         messages = [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": question}]
         out = Answer(question=question, answer="", settings=settings)
         tokens = {"prompt": 0, "completion": 0}
@@ -102,15 +111,21 @@ class Agent:
             r = self.client.chat(messages, thinking=thinking, max_tokens=a_cfg["max_tokens"], use_cache=use_cache,
                                  timeout_s=a_cfg["timeout_s"], **kw)
             out.steps += 1
+            out.reasoning_chars += len(r.reasoning or "")
             for k in tokens:
                 tokens[k] += int(r.usage.get(f"{k}_tokens") or 0)
             return r
 
+        nudged = False
         try:
             for _ in range(max_steps):
                 r = request(tools=self.specs)
                 messages.append(r.message)
                 if not r.tool_calls:
+                    if not out.trace and not nudged:  # answered from nothing: once back to the tools
+                        nudged = True
+                        messages.append({"role": "user", "content": USE_TOOLS})
+                        continue
                     out.answer = r.content or ""
                     break
                 for tc in r.tool_calls:

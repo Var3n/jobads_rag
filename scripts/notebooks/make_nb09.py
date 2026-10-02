@@ -18,24 +18,39 @@ from IPython.display import Image, Markdown, display
 from hisrag.config import load_config
 from hisrag.data import query
 
+VERSION = "v2"  # prompt version of the pilot to review (v1 = first pilot, its CSV is agent_pilot.csv)
+
 cfg = load_config()
 LOGS = cfg.path("agent_log").parent
-pilot = pd.read_csv(LOGS / "agent_pilot.csv").fillna({"unknown_ids": ""})
+csv = {"v1": "agent_pilot.csv"}.get(VERSION, f"agent_pilot_{VERSION}.csv")
+pilot = pd.read_csv(LOGS / csv).fillna({"unknown_ids": ""})
 questions = list(dict.fromkeys(pilot["question"]))
 
-# the full traces: the newest log record per (question, thinking)
+# the full traces of this version: the newest log record per (question, thinking)
 log = [json.loads(line) for line in cfg.path("agent_log").read_text(encoding="utf-8").splitlines()]
+version = lambda r: r["settings"].get("prompt_version", "v1")
 traces = {}
 for r in log:
-    traces[(r["question"], r["settings"]["thinking"])] = r
-print(f"{len(pilot)} answers to {len(questions)} questions; {len(log)} log records")"""),
-    md("## Overview per mode"),
+    if version(r) == VERSION:
+        traces[(r["question"], r["settings"]["thinking"])] = r
+print(f"prompt {VERSION}: {len(pilot)} answers to {len(questions)} questions; "
+      f"{sum(version(r) == VERSION for r in log)} of {len(log)} log records")"""),
+    md("""## Overview per mode
+
+All prompt versions in the log, one column per (version, reasoning):"""),
+    code("""pd.DataFrame([{"version": version(r), "thinking": r["settings"]["thinking"], "steps": r["steps"],
+               "seconds": r["seconds"], "at_limit": r["stopped"] == "max_steps", "no_tools": not r["trace"],
+               "cited": len(r["cited"]), "unknown_ids": len(r["unknown_ids"]) > 0,
+               "reasoning_chars": r.get("reasoning_chars")} for r in log]
+ ).groupby(["version", "thinking"]).mean().round(2).T"""),
+    md("This version:"),
     code("""pilot.groupby("thinking").agg(
     answers=("answer", "size"), stopped_at_limit=("stopped", lambda s: (s == "max_steps").sum()),
     errors=("stopped", lambda s: (s == "error").sum()), mean_steps=("steps", "mean"),
     mean_seconds=("seconds", "mean"), max_seconds=("seconds", "max"), mean_cited=("n_cited", "mean"),
     with_unknown_ids=("unknown_ids", lambda s: (s != "").sum()),
-    mean_completion_tokens=("completion_tokens", "mean")).round(1).T"""),
+    mean_completion_tokens=("completion_tokens", "mean"),
+    mean_reasoning_chars=("reasoning_chars", "mean")).round(1).T"""),
     code("""overview = pilot.assign(q=pilot["question"].map(questions.index))[
     ["q", "thinking", "steps", "seconds", "n_cited", "unknown_ids", "stopped", "tools_used"]]
 overview.sort_values(["q", "thinking"]).reset_index(drop=True)"""),
@@ -68,7 +83,8 @@ def compare(i: int) -> None:
         if r is None:
             continue
         head = (f"## {'mit' if thinking else 'ohne'} Reasoning · {r['steps']} Anfragen, {r['seconds']:.0f} s, "
-                f"{r['tokens']['completion']} Ausgabe-Tokens, Ende: {r['stopped']}")
+                f"{r['tokens']['completion']} Ausgabe-Tokens, {r.get('reasoning_chars', '?')} Zeichen Reasoning, "
+                f"Ende: {r['stopped']}")
         warn = f"\\n\\n**Erfundene IDs:** {', '.join(r['unknown_ids'])}" if r["unknown_ids"] else ""
         display(Markdown(f"{head}{warn}\\n\\n{r['answer']}\\n\\n**Tool-Aufrufe**\\n\\n{tool_lines(r['trace'])}"))
 

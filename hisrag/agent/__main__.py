@@ -3,7 +3,7 @@
   ask "Frage" [--thinking]
           answer one question; prints the answer, the tool calls and the citation check.
   pilot [--thinking off|on|both]
-          the pilot questions below, in parallel → data/logs/agent_pilot.csv for review (answer, tool calls,
+          the pilot questions below, in parallel → data/logs/agent_pilot_<prompt version>.csv for review (answer, tool calls,
           citations, time, tokens; full traces in data/logs/agent.jsonl). Default: both, to compare reasoning.
 """
 
@@ -42,7 +42,7 @@ def run_ask(cfg, question: str, thinking: bool) -> dict:
 def run_pilot(cfg, modes: list[bool]) -> dict:
     import pandas as pd
 
-    from hisrag.agent.loop import Agent
+    from hisrag.agent.loop import PROMPT_VERSION, Agent
 
     agent = Agent(cfg)
     jobs = [(q, t) for t in modes for q in PILOT_QUESTIONS]
@@ -51,19 +51,20 @@ def run_pilot(cfg, modes: list[bool]) -> dict:
                           "tools_used": a.tools_used(),
                           "tool_args": json.dumps([{"tool": t["tool"], "args": t["args"]} for t in a.trace],
                                                   ensure_ascii=False),
-                          "steps": a.steps, "stopped": a.stopped, "n_cited": len(a.cited),
+                          "steps": a.steps, "stopped": a.stopped, "reasoning_chars": a.reasoning_chars,
+                          "n_cited": len(a.cited),
                           "unknown_ids": ", ".join(a.unknown_ids), "seconds": a.seconds,
                           "completion_tokens": a.tokens["completion"], "prompt_tokens": a.tokens["prompt"]}
                          for a in answers])
-    path = cfg.path("agent_log").parent / "agent_pilot.csv"
+    path = cfg.path("agent_log").parent / f"agent_pilot_{PROMPT_VERSION}.csv"
     rows.to_csv(path, index=False, encoding="utf-8-sig")
     per_mode = rows.groupby("thinking").agg(
         answers=("answer", "size"), stopped_max_steps=("stopped", lambda s: int((s == "max_steps").sum())),
         errors=("stopped", lambda s: int((s == "error").sum())), mean_steps=("steps", "mean"),
         mean_seconds=("seconds", "mean"), max_seconds=("seconds", "max"), mean_cited=("n_cited", "mean"),
         answers_with_unknown_ids=("unknown_ids", lambda s: int((s != "").sum())),
-        mean_completion_tokens=("completion_tokens", "mean"))
-    return {"questions": len(PILOT_QUESTIONS), "review_csv": str(path),
+        mean_completion_tokens=("completion_tokens", "mean"), mean_reasoning_chars=("reasoning_chars", "mean"))
+    return {"questions": len(PILOT_QUESTIONS), "prompt_version": PROMPT_VERSION, "review_csv": str(path),
             "per_thinking": {str(k): {c: round(float(v), 1) for c, v in r.items()} for k, r in per_mode.iterrows()},
             "usage": agent.client.usage.summary()}
 

@@ -96,3 +96,9 @@ def test_search_ads_returns_the_full_text(tools, monkeypatch):
                           "text": "Köchin gesucht. " * 200, "dup_cluster_size": 1, "quality_warning": None}])
     monkeypatch.setattr(tools.index, "semantic", lambda *a, **k: long)
     assert tools.call("search_ads", {"query": "Köchin"})["results"][0]["text"] == "Köchin gesucht. " * 200
+
+
+def test_keyword_without_hits_says_how_to_loosen(tools):
+    r = tools.call("search_ads", {"query": "Haus Rothschild", "mode": "keyword"})
+    assert r["total_matches"] == 0 and "weniger" in r["hint"]
+    assert "hint" not in tools.call("search_ads", {"query": "Krakau OR Rothschild", "mode": "keyword"})

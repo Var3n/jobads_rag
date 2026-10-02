@@ -206,3 +206,19 @@ def test_check_reproduces_the_evaluation_runs(cfg, monkeypatch):
     runs.to_parquet(cfg.path("eval_dir") / "runs.parquet")
     report = run_check(cfg)
     assert report["mean_overlap_with_eval_top10"] == 1.0 and report["questions_identical"] == 2
+
+
+def test_keyword_or_groups(built):
+    cfg, client, *_ = built
+    index = AdIndex(cfg, client)
+    parts = parse_keywords('Clavier OR "k. k. Volksschule" Lehrer* -Commis OR Wirthschafterin')
+    assert [(p.occur, p.kind, p.group) for p in parts] == [
+        ("MUST", "word", 0), ("MUST", "phrase", 0), ("MUST", "prefix", 1),
+        ("MUST_NOT", "word", 2), ("MUST_NOT", "word", 2)]
+    found = lambda q: set(index.keyword(q, k=None)["ad_id"])
+    assert found("Clavier OR Krakauer") == {"w5", "w4"}
+    assert found('Clavier OR "k. k. Volksschule" Lehrer*') == {"w3", "w5"}
+    assert found("Zahnarzt* OR Krakau") == {"w3"}     # a prefix without words drops out of its group
+    assert found("Zahnarzt* OR Zahntechniker*") == set()
+    assert found("gesucht -Clavier OR -Mähren") == {"w1"} or found("gesucht -Clavier OR -Mähren") == {"w2"}
+    assert len(parse_keywords("OR Krakau")) == 1

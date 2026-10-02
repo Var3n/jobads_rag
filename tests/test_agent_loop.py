@@ -109,3 +109,19 @@ def test_pilot_writes_a_review_csv(built, monkeypatch):  # noqa: F811
     rows = pd.read_csv(report["review_csv"])
     assert len(rows) == 2 * len(PILOT_QUESTIONS) and set(rows["tools_used"]) == {"aggregate"}
     assert report["per_thinking"]["False"]["answers"] == len(PILOT_QUESTIONS)
+
+
+def test_an_answer_without_tools_is_sent_back_once(built):  # noqa: F811
+    def handler(payload):
+        users = [m["content"] for m in payload["messages"] if m["role"] == "user"]
+        if len(users) == 1:
+            return {"content": "Geschätzt: viele.", "reasoning": "hmm"}
+        if rounds(payload) == 1:
+            return {"tool_calls": [call("aggregate", {"group_by": "none"})], "reasoning": "jetzt Tools"}
+        return {"content": "Gezählt: 5.", "reasoning": "fertig"}
+
+    agent, _ = make_agent(built, handler)
+    a = agent.ask("Wie viele?", log=False)
+    assert a.answer == "Gezählt: 5." and len(a.trace) == 1 and a.steps == 3
+    assert a.reasoning_chars == len("hmm") + len("jetzt Tools") + len("fertig")
+    assert a.settings["prompt_version"] == "v2"

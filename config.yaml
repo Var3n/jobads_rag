@@ -37,8 +37,8 @@ index:
 
 # Agent loop (step 11)
 agent:
-  thinking: false                       # Qwen reasoning; the pilot compares both
-  max_steps: 8                          # model requests with tools; then one last request for the answer
+  thinking: true                        # Qwen reasoning: pilot 1 was no slower with it and failed less
+  max_steps: 12                         # model requests with tools; then one last request for the answer
   max_tokens: 8000                      # per request (reasoning counts against it)
   timeout_s: 900
 

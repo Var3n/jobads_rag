@@ -34,6 +34,9 @@ from hisrag.normalize.text import fold_spelling
 LABELS = ("job_offer", "job_search", "service_offer", "vermittlung")
 FULL_TEXT_CHARS = 4000  # get_ad's safeguard; the longest ad has ~2,400
 MAX_GROUPS = 40       # largest groups kept for lemmas, values, …; years and decades are always complete
+ZERO_HITS = ("0 Treffer. Im Modus keyword müssen alle Wörter vorkommen. Vor dem Schluss, dass etwas fehlt: weniger "
+             "Wörter, wort* für andere Wortformen, A OR B für Varianten, weniger Filter oder den Modus semantic "
+             "versuchen.")
 COUNTABLE_NOTE = ("Gezählt werden nur zählbare Anzeigen: je Anzeige ein Abdruck (Wiederholungen nicht), ohne Texte, "
                   "die die Nachkorrektur stark verändert oder erfunden hat.")
 
@@ -80,7 +83,9 @@ class SearchArgs(BaseModel):
         "semantic", description="semantic findet Anzeigen nach Bedeutung, auch in historischer Wortwahl; keyword "
                                 "findet genau diese Wörter (Namen, Orte, feste Begriffe) in jeder historischen "
                                 "Schreibung. keyword-Syntax: alle Wörter müssen vorkommen, \"…\" ist eine Phrase, "
-                                "wort* ein Wortanfang (Krakau* für Krakau, Krakauer), -wort schließt aus")
+                                "wort* ein Wortanfang (Krakau* für Krakau, Krakauer), A OR B eines von beiden "
+                                "(OR großgeschrieben), -wort schließt aus. Nur die kennzeichnenden Wörter angeben: "
+                                "Rothschild, nicht Haus Rothschild")
     filters: FilterArgs = Field(default_factory=FilterArgs)
     k: int = Field(10, ge=1, le=25, description="Anzahl der Treffer (höchstens 25)")
 
@@ -208,6 +213,8 @@ class Tools:
             out["total_countable"] = int(hits["countable"].sum())
             if hits.attrs.get("expanded"):
                 out["expanded"] = {k: v[:20] for k, v in hits.attrs["expanded"].items()}
+            if hits.empty:
+                out["hint"] = ZERO_HITS
             hits = hits.head(a.k)
         out["results"] = [self._hit(r) for r in hits.itertuples()]
         return out

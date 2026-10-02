@@ -4,8 +4,9 @@
                       index.dims): finds ads by meaning, in modern German, across historical wording.
   keyword(words)      exact words in the folded text, ranked by BM25: for names, places and fixed terms. All
                       words must occur; "…" is a phrase, word* a prefix (expanded from the index's word list),
-                      -word excludes. Historical spellings match their modern form (Wirthschafterin,
-                      Correspondent, Clavier), inflected forms do not ("Krakau" misses "Krakauer": krakau*).
+                      a OR b either of two, -word excludes. Historical spellings match their modern form
+                      (Wirthschafterin, Correspondent, Clavier), inflected forms do not ("Krakau" misses
+                      "Krakauer": krakau*).
 
 Both take `Filters` and return one ad per printing cluster (the first printing found), best first.
 """
@@ -103,23 +104,31 @@ class Part:
     occur: str            # MUST or MUST_NOT
     kind: str             # word, phrase, prefix
     words: list[str]      # folded
+    group: int = 0        # parts joined by OR share a group; one part of each group must match
 
 
 _PART = re.compile(r'(-?)"([^"]*)"|(-?)(\S+)')
 
 
 def parse_keywords(q: str) -> list[Part]:
-    parts = []
+    parts: list[Part] = []
+    join = False  # the previous token was OR
     for m in _PART.finditer(q):
         neg, text = (m.group(1), m.group(2)) if m.group(2) is not None else (m.group(3), m.group(4))
+        if m.group(2) is None and text == "OR":
+            join = bool(parts)
+            continue
         words = WORD.findall(fold_spelling(text))
         if not words:
             continue
         occur = "MUST_NOT" if neg else "MUST"
-        if m.group(2) is None and text.endswith("*") and len(words) == 1:
-            parts.append(Part(occur, "prefix", words))
-        else:
-            parts.append(Part(occur, "phrase" if len(words) > 1 else "word", words))
+        kind = ("prefix" if m.group(2) is None and text.endswith("*") and len(words) == 1
+                else "phrase" if len(words) > 1 else "word")
+        group = parts[-1].group if join else (parts[-1].group + 1 if parts else 0)
+        if join:
+            occur = parts[-1].occur  # "-a OR b" excludes both
+        parts.append(Part(occur, kind, words, group))
+        join = False
     return parts
 
 
@@ -175,19 +184,24 @@ class AdIndex:
 
         col = "text_folded"
         clauses, expanded = [], {}
-        for p in parse_keywords(q):
-            if p.kind == "prefix":
-                terms = expanded[p.words[0] + "*"] = self.expand(p.words[0])
-                if not terms:
-                    if p.occur == "MUST":
-                        return self._empty(expanded)
-                    continue
-                sub = BooleanQuery([(Occur.SHOULD, MatchQuery(t, col)) for t in terms])
-            elif p.kind == "phrase":
-                sub = PhraseQuery(" ".join(p.words), col)
-            else:
-                sub = MatchQuery(p.words[0], col)
-            clauses.append((Occur[p.occur], sub))
+        parts = parse_keywords(q)
+        for g in dict.fromkeys(p.group for p in parts):
+            subs = []
+            for p in (p for p in parts if p.group == g):
+                if p.kind == "prefix":
+                    terms = expanded[p.words[0] + "*"] = self.expand(p.words[0])
+                    subs += [MatchQuery(t, col) for t in terms]
+                elif p.kind == "phrase":
+                    subs.append(PhraseQuery(" ".join(p.words), col))
+                else:
+                    subs.append(MatchQuery(p.words[0], col))
+            occur = next(p.occur for p in parts if p.group == g)
+            if not subs:  # a prefix that no word in the index starts with
+                if occur == "MUST":
+                    return self._empty(expanded)
+                continue
+            sub = subs[0] if len(subs) == 1 else BooleanQuery([(Occur.SHOULD, x) for x in subs])
+            clauses.append((Occur[occur], sub))
         if not any(o == Occur.MUST for o, _ in clauses):
             raise ValueError(f"no word that must occur in {q!r}")
         fts = BooleanQuery(clauses)
