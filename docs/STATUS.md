@@ -148,9 +148,14 @@ Known limits: keywords farther than the window (Quartiergeld categories, long po
    embeddinggemma 768 dims 55 GB; embedding 127 h vs 10 h. Proposed: qwen3-8b/enriched for the PoC, model for 18M
    decided at the scale test; BM25 not fused but offered as a separate exact-word search mode (the test questions
    excluded names and places by design, where exact matching is needed).
-   **Open now (user's request):** shortened qwen vectors (Matryoshka) at 2048/1024/768/512/256 dims via
-   `score --extend --models qwen3-embedding-8b@2048,...` (no new embeddings; only newly pooled pairs are judged; all
-   methods rescored against the larger pool), section "Shortened qwen3-embedding-8b vectors" in notebook 06.
+   **Shortened qwen vectors (Matryoshka, user's request):** `score --extend --models qwen3-embedding-8b@2048,...` cut
+   the stored vectors (no new embeddings), judged 1,557 newly pooled pairs (290 requests, 2.5 min) and rescored all
+   methods (full qwen 0.662 → 0.657 from the larger pool). nDCG@10: 4096 dims 0.657, 2048 0.662, 1024 0.654,
+   768 0.648, 512 0.629, 256 0.607; paired vs full: no measurable loss down to 768, measurable at 512 and 256. On job
+   searches every length ≥ 768 keeps 0.668 vs embeddinggemma 0.557; qwen@768 needs the same storage as
+   embeddinggemma (55 GB at 18M), qwen@1024 74 GB. Shortening saves storage and search time, not embedding time
+   (still ~127 h for 18M). **Recommendation: qwen3-embedding-8b on the enriched text at 1024 dims for step 9**;
+   whether the embedding time is acceptable at 18M is checked at the scale test (step 15).
 2. Steps 9 onward as in the table.
 
 **Clean table (step 7).** `ad_clean`: 52,823 regions, 49,817 searchable, 41,024 countable (30,670 job offers, 5,896
