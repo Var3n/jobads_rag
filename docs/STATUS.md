@@ -1,6 +1,6 @@
 # Project status (proof of concept)
 
-Last updated: 2026-09-30, step 7 done. Read this first when picking the project up; `README.md` has setup and commands.
+Last updated: 2026-10-02, step 8 done, step 9 next. Read this first when picking the project up; `README.md` has setup and commands.
 
 ## Goal and constraints
 
@@ -45,8 +45,8 @@ Consequences of the scale (120 requests/min, ~10 tokens/s per request):
 | 5 | Requirement tags (LLM) | done | `requirement_dict` (22,494 phrases), `ad_requirements` (66,632 tag mentions, 23,037 ads) |
 | 6 | Salary parsing | done | `ad_salary` (22,639 spans: 21,667 by rules, 289 by LLM), `ad_pay` (9,722 ads with main pay, benefits per ad) |
 | 7 | Final clean table + sanity plots | done | `ad_clean`: 41,024 countable ads; `notebooks/05_clean_table.ipynb` |
-| 8 | Embedding comparison | **next** | synthetic known-item queries (Qwen writes a query for a known ad), recall@k, keyword vs. vector vs. hybrid |
-| 9 | Index | open | LanceDB with vectors, keyword index and filter columns |
+| 8 | Retrieval comparison | done | 299 LLM research questions, pooled LLM judgments; winner qwen3-embedding-8b on enriched text, 1,024 dims (nDCG@10 0.654) |
+| 9 | Index | **next** | LanceDB with vectors, keyword index and filter columns |
 | 10 | Agent tools | open | `search_ads`, `get_ad`, `aggregate` (SQL templates), `expand_concept` |
 | 11 | Agent loop | open | Qwen tool calling (tested in step 0), cites ad IDs, always reports how many ads an answer rests on |
 | 12 | Playground notebook | open | answer, tool trace, cited clippings (IIIF), rating widget → interaction log |
@@ -112,52 +112,6 @@ Gehalt/Lohn/Remuneration/Taggeld, never Kaution or Pension; alternatives give mi
 Known limits: keywords farther than the window (Quartiergeld categories, long position lists) leave `component` empty
 (~7 %); OCR-split numbers ("9 45 fl.") are read wrongly.
 
-## Open items (in order)
-
-1. **Step 8: retrieval comparison, rebuilt as research questions with LLM judgments.** `hisrag/eval/retrieval.py`,
-   `python -m hisrag.eval queries|embed|score`. All five embedding models are tested (user's decision). The first
-   design (known-item: find one ad from a paraphrase) was dropped after its pilot (2026-10-02): the questions read like
-   headlines of the ad, 42 % of their long words were copied, and many sampled regions were notice tails, Italian text
-   or a loan ad; researchers ask topical questions with many relevant ads, and `get_ad` is a lookup by ID, not a search.
-   Now (user's choice, option B): seeds = countable German ads with a position and ≥ 120 characters, decades weighted
-   by √size; the LLM writes a research question + relevance criterion (no years, names, places below crown land);
-   every method's top 10 (one printing per ad) is pooled and judged 0/1/2 by the LLM, blind to the method; measures
-   precision@10, nDCG@10, recall per relevant printing cluster in the pool, `seed_found`. BM25 uses `fold_spelling`
-   (moved to `normalize/text.py`) plus light suffix stripping. Embeddings in `data/embeddings/` (outside `derived`, so
-   no DuckDB view), chunks of 1,024, resumable; question vectors stored too, so the judged pool is reproducible.
-   Embedding time per text variant: embeddinggemma 1.7 min, bge-m3 2.2, jina v3 2.9, jina v4 13, qwen3-8b 21.
-   **Judge pilots (20 questions, ~64 pooled ads each, three prompt versions):** v1 read modern terms literally (a
-   Köchin was no Hausgehilfin); v2 fixed that but one request graded a whole run of fitting ads 0; v3 (final) sends
-   one question per request and writes a ≤ 12-word reason before each grade. v3 is somewhat over-literal on 2 vs 1
-   ("Realgymnasium ist kein reines Gymnasium"); grade agreement between versions is 75–89 %, but the **ranking of the
-   22 methods is stable across all versions** (Spearman 0.91–0.98, strict and lenient), so the judge does not decide
-   the result. Pilot ranking: qwen3-8b/enriched first (strict p@10 0.37–0.44), embeddinggemma/enriched and jina v3
-   close behind, bge-m3 and jina v4 lower, BM25 last (0.19–0.20); enriched beats raw; the equal-weight hybrids are
-   worse than the pure models because BM25 is weak here.
-   **Full run (299 questions, 20,113 judged pairs, 67 per question, 1,094 requests in 11 min):** nDCG@10 / strict
-   p@10: qwen3-8b/enriched 0.662 / 0.438, qwen3-8b/raw 0.647 / 0.432, embeddinggemma/enriched 0.637 / 0.434,
-   embeddinggemma/raw 0.597 / 0.403, jina v3/enriched 0.596 / 0.393, bge-m3/enriched 0.522 / 0.354, best hybrid
-   (qwen3-8b/enriched) 0.515 / 0.328, jina v4/enriched 0.428 / 0.283, BM25/enriched 0.351 / 0.219. Enriched beats raw
-   for every model. Cost per 50,000 ads: qwen3-8b 21 min vs embeddinggemma 1.7 min (18M ads: ~5 days vs ~10 h).
-   `notebooks/06_retrieval_comparison.ipynb`: intervals, paired differences to the best method, enriched vs raw,
-   by decade and kind of ad, cost and storage at 18M, side-by-side top 5.
-   **Paired differences (notebook 06):** qwen3-8b/enriched vs embeddinggemma/enriched +0.025 nDCG, 95 % interval
-   −0.002 to +0.052, so not distinguishable overall; every other method is reliably worse. But by kind of ad they are
-   equal on job offers (0.655 vs 0.648, n = 217) while qwen leads on **job searches** (0.677 vs 0.564, n = 45) and in
-   the 1850s–60s (0.629 vs 0.578), the free narrative texts. Storage at 18M ads (float32): qwen 4096 dims 295 GB,
-   embeddinggemma 768 dims 55 GB; embedding 127 h vs 10 h. Proposed: qwen3-8b/enriched for the PoC, model for 18M
-   decided at the scale test; BM25 not fused but offered as a separate exact-word search mode (the test questions
-   excluded names and places by design, where exact matching is needed).
-   **Shortened qwen vectors (Matryoshka, user's request):** `score --extend --models qwen3-embedding-8b@2048,...` cut
-   the stored vectors (no new embeddings), judged 1,557 newly pooled pairs (290 requests, 2.5 min) and rescored all
-   methods (full qwen 0.662 → 0.657 from the larger pool). nDCG@10: 4096 dims 0.657, 2048 0.662, 1024 0.654,
-   768 0.648, 512 0.629, 256 0.607; paired vs full: no measurable loss down to 768, measurable at 512 and 256. On job
-   searches every length ≥ 768 keeps 0.668 vs embeddinggemma 0.557; qwen@768 needs the same storage as
-   embeddinggemma (55 GB at 18M), qwen@1024 74 GB. Shortening saves storage and search time, not embedding time
-   (still ~127 h for 18M). **Recommendation: qwen3-embedding-8b on the enriched text at 1024 dims for step 9**;
-   whether the embedding time is acceptable at 18M is checked at the scale test (step 15).
-2. Steps 9 onward as in the table.
-
 **Clean table (step 7).** `ad_clean`: 52,823 regions, 49,817 searchable, 41,024 countable (30,670 job offers, 5,896
 job searches, 3,205 service offers, 1,253 agency ads). Of the countable ads 40.7 % have a position, 42.6 % requirement
 tags, 21.2 % a main pay. The 1920s (271 countable) and 1930s (17) are nearly empty, so the corpus is effectively
@@ -165,14 +119,72 @@ tags, 21.2 % a main pay. The 1920s (271 countable) and 1930s (17) are nearly emp
 on 83–89 % job offers; pay is stated in 67 % of job offers in the 1860s, ~15 % by 1900, ~0 after 1920; the death
 register sits in the 1870s–1880s. `notebooks/05_clean_table.ipynb` draws points resting on < 200 ads hollow.
 
+**Retrieval comparison (step 8, `hisrag/eval/`, `notebooks/06_retrieval_comparison.ipynb`).**
+*Design.* The first design (known-item: find one ad again from a paraphrase) was dropped after its pilot: the questions
+read like headlines of the ad and copied 42 % of its long words, and researchers ask topical questions with many
+relevant ads (`get_ad` is a lookup by ID, not a search). Final design (user's choice): 300 seed ads (countable, German,
+with a position, ≥ 120 characters, decades weighted by √size); the LLM writes a research question plus a relevance
+criterion as general as the question (no years, names, places below crown land); every method returns its top 10 over
+all 49,817 searchable ads (one printing per ad); every pooled ad is judged 0/1/2 by the LLM, blind to the method, one
+question per request, with a ≤ 12-word reason before the grade (the reason is stored). Measures per question: nDCG@10
+(gains 0/1/3), p@10 strict (grade 2) and lenient (≥ 1), recall against the relevant printing clusters in the pool,
+`seed_found`. 22 methods: BM25 (spelling-folded, `fold_spelling` in `normalize/text.py`), 5 embedding models,
+BM25+model hybrids (RRF), each on `raw` text and `enriched` text (ad + "Stelle/Anforderungen/Lohn" from steps 4–6).
+*Judge reliability.* Three judge prompt versions on 20 pilot questions agreed on 75–89 % of grades, but ranked the 22
+methods almost identically (Spearman 0.91–0.98), so the ranking is trustworthy, absolute numbers less so. The final
+judge is somewhat over-literal on 2 vs 1 ("Realgymnasium ist kein reines Gymnasium"). Caveat: question writer, judge
+and the winning embedding model are all Qwen.
+*Results (299 questions, 21,670 judged pairs).* nDCG@10 / strict p@10 after the extension: qwen3-embedding-8b/enriched
+0.657 / 0.438, embeddinggemma-300m/enriched 0.633 / 0.434, jina v3/enriched 0.592, bge-m3/enriched 0.519, best hybrid
+0.511, jina v4/enriched 0.425, BM25/enriched 0.348 / 0.219. Paired: qwen vs embeddinggemma overall not distinguishable
+(+0.025, interval −0.002…+0.052), but equal on job offers and clearly better on **job searches** (0.668 vs 0.557,
+n = 45) and in the 1850s–60s; all other methods reliably worse. Enriched beats raw for every model. Hybrids lose to the
+pure models (BM25 is weak on paraphrased questions). Shortened qwen vectors (Matryoshka, `score --extend`): no
+measurable loss down to 768 dims (2048: 0.662, 1024: 0.654, 768: 0.648), measurable at 512 (0.629) and 256 (0.607);
+the job-search lead holds at every length ≥ 768.
+*Cost.* Embedding 50k ads: qwen3-8b 21 min, embeddinggemma 1.7, bge-m3 2.2, jina v3 2.9, jina v4 13. For 18M ads:
+qwen ~127 h (shortening does not reduce this), embeddinggemma ~10 h; storage float32 qwen@1024 74 GB, @4096 295 GB.
+**Decision (user, 2026-10-02): qwen3-embedding-8b on the enriched text, stored at 1,024 dimensions.** BM25 is not
+fused; it becomes a separate exact-word search mode (the test excluded names and places by design, where exact
+matching matters). Whether qwen's embedding time is acceptable at 18M is checked at the scale test (step 15);
+embeddinggemma-300m is the fallback (same storage at 768 dims, weaker on job searches).
+*Files on the cluster.* `data/eval/` (queries, runs, judgments, scores parquet), `data/embeddings/<variant>/<model>/`
+(full 4096-dim qwen vectors for raw and enriched; all five models), `data/embeddings/questions/`.
+
+## Open items (in order)
+
+1. **Step 9: index.** Plan agreed in outline, not started:
+   * LanceDB table (new dependency `lancedb`) built from `ad_clean` WHERE `searchable`, one row per ad: `ad_id`,
+     `vector` = qwen3-embedding-8b on the `enriched` text cut to 1,024 dims and renormalized (reuse
+     `hisrag.eval.retrieval.documents()`, `load_vectors()`, `truncate()`; the stored 4096-dim vectors in
+     `data/embeddings/enriched/qwen3-embedding-8b/` can be reused, no new embedding for the Wiener Zeitung).
+   * Filter columns from `ad_clean`: newspaper, year, decade, date, label, `countable`, `is_canonical`,
+     `dup_cluster_id`, lang, position categories/lemmas, `position_gender`, requirement dimensions, pay fields, benefit
+     flags, quality warning; plus the display text and `iiif_link`.
+   * Keyword search as a separate mode: LanceDB full-text index or the existing `BM25` with `fold_spelling`
+     (historical spellings must match, e.g. Wirthschafterin/Wirtschafterin); decide by testing exact names/places.
+   * Query side: embed the question with the qwen query prefix (config) and cut to 1,024 dims; one result per printing
+     cluster (`dup_cluster_id`), as in the evaluation.
+   * Per partition (newspaper) so more newspapers can be added; check index build time and size for the scale test.
+   * Tests locally with FakeOpenAI vectors; on the cluster a small notebook to try queries (e.g. the step-8 questions)
+     before the agent tools of step 10.
+2. Steps 10 onward as in the table.
+
 Smaller known issues: one hallucinated company name from context in step 5; single-occurrence OCR garbles in step 4
 ("Applent", "Praschneiderin") are mapped with guesses; the generic "Lehrling" category depends on its example.
 
 ## Practical notes for development
 
-* Windows machine, Git Bash and PowerShell. Long Python edits with quotes or backslashes break inside bash heredocs:
-  write the edit script to the scratchpad with the Write tool and run it.
-* Notebooks are generated with `nbformat` from a small script and executed locally (with fake tables where the real
-  ones only exist on the cluster) before pushing.
-* DuckDB quirks met so far: views cannot take prepared parameters; `QUALIFY` does not combine with `GROUP BY ALL`;
-  `USING SAMPLE` is applied before `WHERE`.
+* Windows machine, Git Bash and PowerShell. Run Python as `.venv/Scripts/python` (a bare `python` can hang on the
+  Windows Store alias). Long Python edits with quotes or backslashes break inside bash heredocs (backslashes are
+  swallowed): use the Edit tool, or write the script to the scratchpad with the Write tool and run it.
+* Notebooks 04–06 are generated by `scripts/notebooks/make_nb0X.py` (run from the repo root; they overwrite the
+  notebook). Before pushing, notebooks are executed locally cell by cell with stand-in tables where the real ones only
+  exist on the cluster: a local `ad_clean` built from the real steps 1–3 and 6 (salary with a fake LLM) plus random
+  stand-in positions/requirements, and fake eval files from `FakeOpenAI` (random vectors and grades). Only the
+  mechanics are checked that way, never the numbers.
+* The user runs cluster jobs that take long with `nohup … > data/logs/<name>.log 2>&1 &`; `embed` and `score` resume.
+* DuckDB quirks met so far: views cannot take prepared parameters (queries against views can); `QUALIFY` does not
+  combine with `GROUP BY ALL`; `USING SAMPLE` is applied before `WHERE` (use `ORDER BY random() LIMIT n`);
+  `.arrow()` returns a `RecordBatchReader` in newer versions (`.read_all()`).
+* JSON reports: numpy scalars as dict keys break `json.dumps` (convert with `str(k)`/`int(v)`).
