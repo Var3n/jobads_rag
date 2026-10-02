@@ -154,3 +154,25 @@ def test_questions_embeddings_runs_and_judging_end_to_end(cfg, monkeypatch):
     out = Path(cfg["paths"]["eval_dir"])
     assert (out / "judgments_pilot.csv").exists() and (out / "scores.parquet").exists()
     assert "bm25/raw" in report["summary"]
+
+    # extension: the 16-dim fake vectors cut to 8 dims; only pairs no method had found are judged
+    before = pd.read_parquet(out / "judgments.parquet")
+    report = cli.run_extend(cfg, ["bge-m3@8"], ("raw",))
+    json.dumps(report, ensure_ascii=False, default=str)
+    after = pd.read_parquet(out / "judgments.parquet")
+    assert report["added_methods"] == ["bge-m3@8/raw"] and "bge-m3@8/raw" in report["summary"]
+    assert len(after) == len(before) + report["new_pairs_judged"]
+    assert not after.duplicated(["query_id", "ad_id"]).any()
+    again = cli.run_extend(cfg, ["bge-m3@8"], ("raw",))           # nothing new: no judging, runs replaced not added
+    assert again["new_pairs_judged"] == 0
+    runs = pd.read_parquet(out / "runs.parquet")
+    assert len(runs[runs["method"] == "bge-m3@8"]) == len(runs[runs["method"] == "bge-m3"])
+
+
+def test_truncated_vectors_are_renormalized():
+    v = np.array([[3.0, 4.0, 12.0]], dtype=np.float32) / 13
+    t = E.truncate(v, 2)
+    assert t.shape == (1, 2) and np.allclose(t, [[0.6, 0.8]])
+    assert E.truncate(v, None) is v
+    assert E.split_model("qwen3-embedding-8b@1024") == ("qwen3-embedding-8b", 1024)
+    assert E.split_model("bge-m3") == ("bge-m3", None)

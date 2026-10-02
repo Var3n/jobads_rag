@@ -10,6 +10,9 @@
           top 10 of BM25, each fully embedded model and the hybrids for every question; the LLM judges the
           pooled ads → data/eval/runs.parquet, judgments.parquet, scores.parquet; prints the measures.
           --pilot judges 20 questions and writes data/eval/judgments_pilot.csv for review.
+  score --extend --models qwen3-embedding-8b@1024,... [--variant enriched|raw|all]
+          add methods to the finished run (model@dims = stored vectors cut to their first dims): only
+          (question, ad) pairs no method had found are judged, then every method is rescored.
 """
 
 import argparse
@@ -111,20 +114,61 @@ def run_score(cfg, pilot: bool, models: list[str]) -> dict:
     return report
 
 
+def run_extend(cfg, models: list[str], variants: tuple[str, ...]) -> dict:
+    """Add methods to a finished run: judge only the (question, ad) pairs no method had found before, then
+    rescore every method against the larger pool."""
+    import pandas as pd
+
+    from hisrag.eval import retrieval as E
+    from hisrag.llm import DHClient
+
+    out = cfg.path("eval_dir")
+    questions = pd.read_parquet(out / "queries.parquet")
+    runs = pd.read_parquet(out / "runs.parquet")
+    judgments = pd.read_parquet(out / "judgments.parquet")
+    docs = E.documents(cfg)
+    client = DHClient(cfg)
+    new_runs = E.run_methods(questions, docs, cfg, client, models, variants=variants, bm25=False, hybrids=False)
+    replaced = set(zip(new_runs["method"], new_runs["variant"]))
+    runs = pd.concat([runs[[(m, v) not in replaced for m, v in zip(runs["method"], runs["variant"])]], new_runs],
+                     ignore_index=True)
+    pooled = E.pool(new_runs, questions, docs)
+    judged = set(zip(judgments["query_id"], judgments["ad_id"]))
+    new_pairs = pooled[[(q, a) not in judged for q, a in zip(pooled["query_id"], pooled["ad_id"])]].reset_index(drop=True)
+    new_judgments, stats = E.judge(client, new_pairs) if len(new_pairs) else (judgments.iloc[:0], {})
+    judgments = pd.concat([judgments, new_judgments], ignore_index=True)
+    per_query = E.scores(runs, judgments, questions)
+    runs.to_parquet(out / "runs.parquet", index=False)
+    judgments.to_parquet(out / "judgments.parquet", index=False)
+    per_query.to_parquet(out / "scores.parquet", index=False)
+    return {"added_methods": sorted(f"{m}/{v}" for m, v in replaced), "new_pairs_judged": len(new_pairs),
+            "judging": stats,
+            "new_grades": {str(k): int(v) for k, v in new_judgments["grade"].value_counts(dropna=False).items()},
+            "summary": {f"{m}/{v}": row.to_dict() for (m, v), row in E.summary(per_query).iterrows()},
+            "usage": client.usage.summary()}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Step 8: retrieval comparison")
     parser.add_argument("step", choices=["queries", "embed", "score"])
     parser.add_argument("--pilot", action="store_true")
     parser.add_argument("--n", type=int, default=300, help="queries: number of research questions")
     parser.add_argument("--models", default=None, help="comma-separated model names (default: all configured)")
-    parser.add_argument("--variant", default="raw", choices=["raw", "enriched", "all"], help="embed: text variant")
+    parser.add_argument("--variant", default=None, choices=["raw", "enriched", "all"],
+                        help="text variant (embed: default raw; score --extend: default enriched)")
+    parser.add_argument("--extend", action="store_true",
+                        help="score: add --models (e.g. qwen3-embedding-8b@1024) to the finished run")
     args = parser.parse_args()
     cfg = load_config()
+    variants = lambda default: ("raw", "enriched") if args.variant == "all" else (args.variant or default,)
     if args.step == "queries":
         report = run_queries(cfg, args.pilot, args.n)
     elif args.step == "embed":
-        variants = ["raw", "enriched"] if args.variant == "all" else [args.variant]
-        report = run_embed(cfg, args.pilot, _models(cfg, args.models), variants)
+        report = run_embed(cfg, args.pilot, _models(cfg, args.models), list(variants("raw")))
+    elif args.extend:
+        if not args.models:
+            parser.error("score --extend needs --models")
+        report = run_extend(cfg, _models(cfg, args.models), variants("enriched"))
     else:
         report = run_score(cfg, args.pilot, _models(cfg, args.models))
     print(json.dumps(report, ensure_ascii=False, indent=1, default=str))

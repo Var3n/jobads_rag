@@ -170,6 +170,7 @@ python -m hisrag.eval queries                   # 300 questions → data/eval/qu
 python -m hisrag.eval embed --variant all       # all models, both texts (or --models a,b / --variant raw)
 python -m hisrag.eval score --pilot             # judge 20 questions → data/eval/judgments_pilot.csv for review
 python -m hisrag.eval score                     # all questions: runs, judgments, scores per method
+python -m hisrag.eval score --extend --models qwen3-embedding-8b@1024   # add methods; judges only new pairs
 ```
 
 Query the result from Python or a notebook:

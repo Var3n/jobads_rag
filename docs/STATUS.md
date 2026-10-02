@@ -140,8 +140,17 @@ Known limits: keywords farther than the window (Quartiergeld categories, long po
    (qwen3-8b/enriched) 0.515 / 0.328, jina v4/enriched 0.428 / 0.283, BM25/enriched 0.351 / 0.219. Enriched beats raw
    for every model. Cost per 50,000 ads: qwen3-8b 21 min vs embeddinggemma 1.7 min (18M ads: ~5 days vs ~10 h).
    `notebooks/06_retrieval_comparison.ipynb`: intervals, paired differences to the best method, enriched vs raw,
-   by decade and kind of ad, cost and storage at 18M, side-by-side top 5. Next: run it on the cluster, then choose
-   the model for step 9 (open: is qwen3-8b vs embeddinggemma distinguishable, and is the 8b cost worth it).
+   by decade and kind of ad, cost and storage at 18M, side-by-side top 5.
+   **Paired differences (notebook 06):** qwen3-8b/enriched vs embeddinggemma/enriched +0.025 nDCG, 95 % interval
+   −0.002 to +0.052, so not distinguishable overall; every other method is reliably worse. But by kind of ad they are
+   equal on job offers (0.655 vs 0.648, n = 217) while qwen leads on **job searches** (0.677 vs 0.564, n = 45) and in
+   the 1850s–60s (0.629 vs 0.578), the free narrative texts. Storage at 18M ads (float32): qwen 4096 dims 295 GB,
+   embeddinggemma 768 dims 55 GB; embedding 127 h vs 10 h. Proposed: qwen3-8b/enriched for the PoC, model for 18M
+   decided at the scale test; BM25 not fused but offered as a separate exact-word search mode (the test questions
+   excluded names and places by design, where exact matching is needed).
+   **Open now (user's request):** shortened qwen vectors (Matryoshka) at 2048/1024/768/512/256 dims via
+   `score --extend --models qwen3-embedding-8b@2048,...` (no new embeddings; only newly pooled pairs are judged; all
+   methods rescored against the larger pool), section "Shortened qwen3-embedding-8b vectors" in notebook 06.
 2. Steps 9 onward as in the table.
 
 **Clean table (step 7).** `ad_clean`: 52,823 regions, 49,817 searchable, 41,024 countable (30,670 job offers, 5,896

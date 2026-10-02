@@ -267,26 +267,48 @@ def query_vectors(client: DHClient, cfg: Config, texts: list[str], model: str) -
     return np.stack([np.asarray(known[t], dtype=np.float32) for t in texts])
 
 
+def split_model(name: str) -> tuple[str, int | None]:
+    """"qwen3-embedding-8b@1024" → ("qwen3-embedding-8b", 1024): the stored vectors cut to their first
+    1024 dimensions (Matryoshka-trained models keep most of their quality there)."""
+    base, _, dims = name.partition("@")
+    return base, int(dims) if dims else None
+
+
+def truncate(vectors: np.ndarray, dims: int | None) -> np.ndarray:
+    if not dims:
+        return vectors
+    v = np.ascontiguousarray(vectors[:, :dims])
+    return v / np.linalg.norm(v, axis=1, keepdims=True).clip(min=1e-12)
+
+
 def run_methods(questions: pd.DataFrame, docs: pd.DataFrame, cfg: Config, client: DHClient,
-                models: list[str], progress: bool = True) -> pd.DataFrame:
-    """One row per (question, method, variant, rank) with the ad found there (top DEPTH)."""
+                models: list[str], *, variants: tuple[str, ...] = VARIANTS, bm25: bool = True,
+                hybrids: bool = True, progress: bool = True) -> pd.DataFrame:
+    """One row per (question, method, variant, rank) with the ad found there (top DEPTH). Model names may
+    carry a dimension ("qwen3-embedding-8b@1024"); hybrids need bm25."""
     runs: dict[str, list[np.ndarray]] = {}
     hybrid_depth = 50  # the hybrid fuses deeper lists than it returns
-    for v in VARIANTS:
+    for v in variants if bm25 else ():
         bm = BM25(docs[v].tolist())
         runs[f"bm25/{v}"] = [bm.search(q, hybrid_depth) for q in questions["question"]]
+    loaded: dict[tuple[str, str], np.ndarray] = {}  # full vectors of the last base model, reused per dimension
     for model in models:
+        base, dims = split_model(model)
         qv = None
-        for v in VARIANTS:
-            vectors = load_vectors(cfg, v, model, docs)
-            if vectors is None:
-                if progress:
-                    print(f"  skip {v}/{model}: not fully embedded", flush=True)
-                continue
+        for v in variants:
+            if (base, v) not in loaded:
+                loaded.clear()
+                full = load_vectors(cfg, v, base, docs)
+                if full is None:
+                    if progress:
+                        print(f"  skip {v}/{model}: not fully embedded", flush=True)
+                    continue
+                loaded[(base, v)] = full
             if qv is None:
-                qv = query_vectors(client, cfg, questions["question"].tolist(), model)
-            runs[f"{model}/{v}"] = dense_search(vectors, qv, hybrid_depth)
-            runs[f"hybrid:{model}/{v}"] = [rrf(a, b) for a, b in zip(runs[f"bm25/{v}"], runs[f"{model}/{v}"])]
+                qv = truncate(query_vectors(client, cfg, questions["question"].tolist(), base), dims)
+            runs[f"{model}/{v}"] = dense_search(truncate(loaded[(base, v)], dims), qv, hybrid_depth)
+            if hybrids and bm25:
+                runs[f"hybrid:{model}/{v}"] = [rrf(a, b) for a, b in zip(runs[f"bm25/{v}"], runs[f"{model}/{v}"])]
     ad_ids, clusters = docs["ad_id"].to_numpy(), docs["dup_cluster_id"].to_numpy()
     rows = []
     for method, rankings in runs.items():
