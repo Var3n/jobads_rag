@@ -124,9 +124,17 @@ Known limits: keywords farther than the window (Quartiergeld categories, long po
    every method's top 10 (one printing per ad) is pooled and judged 0/1/2 by the LLM, blind to the method; measures
    precision@10, nDCG@10, recall per relevant printing cluster in the pool, `seed_found`. BM25 uses `fold_spelling`
    (moved to `normalize/text.py`) plus light suffix stripping. Embeddings in `data/embeddings/` (outside `derived`, so
-   no DuckDB view), chunks of 1,024, resumable. Expected pool ~80–120 ads per question → ~1,000–1,400 judge requests.
-   Next on the cluster: `queries --pilot` (review CSV) and `embed --pilot`, then `queries`, `embed --variant all`,
-   `score --pilot` (review judgments), `score`.
+   no DuckDB view), chunks of 1,024, resumable; question vectors stored too, so the judged pool is reproducible.
+   Embedding time per text variant: embeddinggemma 1.7 min, bge-m3 2.2, jina v3 2.9, jina v4 13, qwen3-8b 21.
+   **Judge pilots (20 questions, ~64 pooled ads each, three prompt versions):** v1 read modern terms literally (a
+   Köchin was no Hausgehilfin); v2 fixed that but one request graded a whole run of fitting ads 0; v3 (final) sends
+   one question per request and writes a ≤ 12-word reason before each grade. v3 is somewhat over-literal on 2 vs 1
+   ("Realgymnasium ist kein reines Gymnasium"); grade agreement between versions is 75–89 %, but the **ranking of the
+   22 methods is stable across all versions** (Spearman 0.91–0.98, strict and lenient), so the judge does not decide
+   the result. Pilot ranking: qwen3-8b/enriched first (strict p@10 0.37–0.44), embeddinggemma/enriched and jina v3
+   close behind, bge-m3 and jina v4 lower, BM25 last (0.19–0.20); enriched beats raw; the equal-weight hybrids are
+   worse than the pure models because BM25 is weak here. Next: full `score` (300 questions, ~900 requests,
+   ~30–40 min), then notebook 06 and the choice of model for step 9.
 2. Steps 9 onward as in the table.
 
 **Clean table (step 7).** `ad_clean`: 52,823 regions, 49,817 searchable, 41,024 countable (30,670 job offers, 5,896

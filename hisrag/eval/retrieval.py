@@ -380,6 +380,7 @@ def scores(runs: pd.DataFrame, judgments: pd.DataFrame, questions: pd.DataFrame)
         n_rel = int(relevant.get(qid, 0))
         rows.append({"query_id": qid, "method": method, "variant": variant,
                      "p@10": (g["grade"] == 2).sum() / DEPTH,
+                     "p@10_lenient": (g["grade"] >= 1).sum() / DEPTH,
                      "ndcg@10": dcg / ideal[qid] if ideal.get(qid, 0) > 0 else 0.0,
                      "recall": (g["grade"] == 2).sum() / n_rel if n_rel else np.nan,
                      "seed_found": bool((g["cluster"] == seeds[qid]).any())})
@@ -388,6 +389,7 @@ def scores(runs: pd.DataFrame, judgments: pd.DataFrame, questions: pd.DataFrame)
 
 def summary(per_query: pd.DataFrame) -> pd.DataFrame:
     return (per_query.groupby(["method", "variant"])
-                     .agg(**{"p@10": ("p@10", "mean"), "ndcg@10": ("ndcg@10", "mean"), "recall": ("recall", "mean"),
+                     .agg(**{"p@10": ("p@10", "mean"), "p@10_lenient": ("p@10_lenient", "mean"),
+                             "ndcg@10": ("ndcg@10", "mean"), "recall": ("recall", "mean"),
                              "seed_found": ("seed_found", "mean")})
                      .round(3).sort_values("ndcg@10", ascending=False))
