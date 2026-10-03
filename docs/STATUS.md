@@ -1,6 +1,6 @@
 # Project status (proof of concept)
 
-Last updated: 2026-10-02, step 11: pilot 1 reviewed, prompt v2 and fixes done, pilot 2 on the cluster pending. Read this first when picking the project up; `README.md` has setup and commands.
+Last updated: 2026-10-03, step 11: pilots 1–2 reviewed, prompt v3 done, short pilot 3 on the cluster pending. Read this first when picking the project up; `README.md` has setup and commands.
 
 ## Goal and constraints
 
@@ -48,7 +48,7 @@ Consequences of the scale (120 requests/min, ~10 tokens/s per request):
 | 8 | Retrieval comparison | done | 299 LLM research questions, pooled LLM judgments; winner qwen3-embedding-8b on enriched text, 1,024 dims (nDCG@10 0.654) |
 | 9 | Index | done | `data/index/` (LanceDB): 49,817 ads, build 6 s, 224 MB; semantic reproduces step 8 (298/299 questions identical) |
 | 10 | Agent tools | done | `hisrag/agent/tools.py`: `search_ads`, `get_ad`, `aggregate`, `expand_concept`; `notebooks/08_agent_tools.ipynb` |
-| 11 | Agent loop | **pilot 2 pending** | `hisrag/agent/loop.py`: `Agent().ask()`, citation check, log `data/logs/agent.jsonl`; pilot 12 questions × reasoning off/on |
+| 11 | Agent loop | **pilot 3 pending** (v3, reasoning only) | `hisrag/agent/loop.py`: `Agent().ask()`, citation check, log `data/logs/agent.jsonl`; pilot 12 questions × reasoning off/on |
 | 12 | Playground notebook | open | answer, tool trace, cited clippings (IIIF), rating widget → interaction log |
 | 13 | Exploration by researchers | open | the log becomes the first evaluation set |
 | 14 | Extensions | open | concept graph and `sample_ads` only where the log shows weaknesses |
@@ -242,11 +242,22 @@ have lemma Lehrer, the school type only in the text; unverified); (4) `unterrich
 an answer before any tool call is sent back once (`USE_TOOLS`); `agent.thinking` true, `max_steps` 12;
 `Answer.reasoning_chars`. The pilot writes `agent_pilot_<version>.csv` (v1 is `agent_pilot.csv`); notebook 09
 reviews one version (`VERSION`) and compares all versions in the log.
+*Pilot 2 (prompt v2, reviewed with the user).* The pilot-1 failures are gone: teachers' pay checked with a broad
+set (835 job offers mentioning "Volksschule" in the 1870s, 362 with pay, median 425 fl.) instead of 2 lemma hits;
+Unterrichtssprache reported apart from Sprachkenntnisse; Rothschild found in both modes; the interwar question
+answered from aggregate in both modes; step limit hit 1× per mode; no invented IDs; ~1 min per answer. Reasoning
+is active (≈3,400 characters per answer). **Without reasoning, 3 of 12 replies were the model's working notes**
+("Lassen Sie mich nun eine umfassende Antwort formulieren.") with no answer and no citations, so that mode is dropped:
+the pilot runs only `agent.thinking` (true) unless `--thinking both`. With reasoning, one remaining waste: one
+`expand_concept` per term (11 in Q8, which hit the limit). Small slips left to the interaction log: "nearly
+indispensable" for French at 4 of 18 ads; a cashier at a butcher counted as office work.
+*v3.* `expand_concept(terms=[…])` looks up to 10 terms in one call (`{"results": [...]}`, one entry per term);
+prompt says so.
 
 ## Open items (in order)
 
-1. **Agent pilot 2 (prompt v2) on the cluster**, same command; check that the failures of pilot 1 are gone, that
-   reasoning is really active (`reasoning_chars`), and decide whether the "without reasoning" mode is still needed.
+1. **Agent pilot 3 (prompt v3) on the cluster**, same command, reasoning only (12 answers, a few minutes): check that
+   the lookups now take one round (fewer steps, no step limit in Q8) and nothing got worse; then step 11 is done.
    Pilot 1 for reference: `nohup python -m hisrag.agent pilot > data/logs/agent_pilot.log 2>&1 &` runs the 12
    questions of `hisrag/agent/__main__.py` (requirements, shares, pay, a name, benefits, job searches, the interwar gap,
    gender, a place + language) without and with reasoning, in parallel → `data/logs/agent_pilot.csv` (answer, tools

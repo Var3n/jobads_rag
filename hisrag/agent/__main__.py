@@ -4,7 +4,8 @@
           answer one question; prints the answer, the tool calls and the citation check.
   pilot [--thinking off|on|both]
           the pilot questions below, in parallel → data/logs/agent_pilot_<prompt version>.csv for review (answer, tool calls,
-          citations, time, tokens; full traces in data/logs/agent.jsonl). Default: both, to compare reasoning.
+          citations, time, tokens; full traces in data/logs/agent.jsonl). Default: the configured mode
+          (agent.thinking); --thinking both compares with and without reasoning.
 """
 
 import argparse
@@ -81,7 +82,7 @@ def main() -> None:
             parser.error("ask needs a question")
         report = run_ask(cfg, args.question, thinking=args.thinking == "on")
     else:
-        modes = {"off": [False], "on": [True], "both": [False, True], None: [False, True]}[args.thinking]
+        modes = {"off": [False], "on": [True], "both": [False, True], None: [cfg["agent"]["thinking"]]}[args.thinking]
         report = run_pilot(cfg, modes)
     print(json.dumps(report, ensure_ascii=False, indent=1, default=str))
 

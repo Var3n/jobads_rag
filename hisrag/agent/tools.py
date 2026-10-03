@@ -111,7 +111,9 @@ class AggregateArgs(BaseModel):
 
 
 class ExpandArgs(BaseModel):
-    term: str = Field(description="ein Beruf, eine Anforderung oder ein Wort, heutig oder historisch")
+    terms: list[str] = Field(min_length=1, max_length=10,
+                             description="Berufe, Anforderungen oder Wörter, heutig oder historisch; alle auf einmal "
+                                         "nachschlagen (z. B. Köchin, Magd, Stubenmädchen)")
 
 
 # ------------------------------------------------------------------ JSON schema for the specs
@@ -149,7 +151,7 @@ SPECS = {
                           "des Originals."),
     "aggregate": (AggregateArgs, "Zählt Anzeigen, berechnet Anteile oder Lohnstatistiken je Gruppe (z. B. Jahrzehnt). "
                                  + COUNTABLE_NOTE),
-    "expand_concept": (ExpandArgs, "Schlägt ein Wort in den Wörterbüchern der Berufe und Anforderungen nach: Lemmata, "
+    "expand_concept": (ExpandArgs, "Schlägt Wörter in den Wörterbüchern der Berufe und Anforderungen nach: Lemmata, "
                                    "historische Schreibungen, Berufsfelder und Anforderungs-Tags mit der Zahl ihrer "
                                    "Anzeigen. Vor Filtern auf Berufe oder Anforderungen aufrufen."),
 }
@@ -343,9 +345,12 @@ class Tools:
         return d
 
     def expand_concept(self, a: ExpandArgs) -> dict:
-        words = re.findall(r"[^\W_]+", fold_spelling(a.term))
+        return {"results": [self._expand(t) for t in a.terms]}
+
+    def _expand(self, term: str) -> dict:
+        words = re.findall(r"[^\W_]+", fold_spelling(term))
         if not words:
-            raise ValueError("leerer Begriff")
+            return {"term": term, "error": "leerer Begriff"}
         hit = lambda s: s.map(lambda x: all(w in x for w in words))
 
         p = self._positions
@@ -367,12 +372,12 @@ class Tools:
         r = self._requirements
         reqs = r[hit(r["f_value"])].nlargest(15, "n")
         cats = [c for c in CATEGORIES if any(w in fold_spelling(c) for w in words)]
-        return {"term": a.term, "positions": lemmas,
+        return {"term": term, "positions": lemmas,
                 "requirements": [{"tag": f"{d}:{v}", "n_ads": int(n)} for d, v, n in
                                  zip(reqs["dimension"], reqs["value"], reqs["n"])],
                 "categories": cats,
                 "hint": "Filter: position_lemmas = Lemma, requirement_tags = Tag, position_categories = Berufsfeld; "
                         "für search_ads im Modus keyword die Schreibungen mit * verwenden."
                         if (lemmas or reqs.size or cats) else
-                        f"Kein Eintrag für {a.term!r}; mit einem anderen oder allgemeineren Wort versuchen oder "
+                        f"Kein Eintrag für {term!r}; mit einem anderen oder allgemeineren Wort versuchen oder "
                         "search_ads im Modus semantic verwenden."}

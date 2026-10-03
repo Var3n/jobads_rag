@@ -18,7 +18,7 @@ from IPython.display import Image, Markdown, display
 from hisrag.config import load_config
 from hisrag.data import query
 
-VERSION = "v2"  # prompt version of the pilot to review (v1 = first pilot, its CSV is agent_pilot.csv)
+VERSION = "v3"  # prompt version of the pilot to review (v1 = first pilot, its CSV is agent_pilot.csv)
 
 cfg = load_config()
 LOGS = cfg.path("agent_log").parent
@@ -67,8 +67,10 @@ overview.sort_values(["q", "thinking"]).reset_index(drop=True)"""),
         elif t["tool"] == "aggregate":
             got = f"n_ads = {r['n_ads']}, {r['groups_total']} Gruppen"
         elif t["tool"] == "expand_concept":
-            got = "Lemmata: " + ", ".join(f"{p['lemma']} ({p['n_ads']})" for p in r["positions"][:6]) + \\
-                  "; Tags: " + ", ".join(f"{q['tag']} ({q['n_ads']})" for q in r["requirements"][:6])
+            got = " · ".join(
+                f"{x['term']}: Lemmata " + ", ".join(f"{p['lemma']} ({p['n_ads']})" for p in x.get("positions", [])[:6])
+                + "; Tags " + ", ".join(f"{q['tag']} ({q['n_ads']})" for q in x.get("requirements", [])[:6])
+                for x in r.get("results", [r]))  # logs before v3: one term per call
         else:
             got = f"{len(r.get('ads', []))} Anzeigen"
         lines.append(f"- Runde {t['step']}: `{t['tool']}` {args}  \\n  → {got}")

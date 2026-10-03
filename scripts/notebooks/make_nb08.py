@@ -7,7 +7,7 @@ cells = [
 The four tools the agent of step 11 will call, run by hand on the real tables. The output below is exactly what the
 model will read (JSON). Check: does each answer carry what a historian needs, is anything misleading, is it too long?
 
-* `expand_concept(term)`: dictionary lookup → lemmas, historical spellings, categories, requirement tags with counts
+* `expand_concept(terms)`: dictionary lookup of one or more words → lemmas, historical spellings, categories, requirement tags with counts
 * `search_ads(query, mode, filters, k)`: semantic or keyword search, short hits
 * `get_ad(ad_ids)`: full records
 * `aggregate(measure, group_by, filters, subset, dimension)`: count / share / pay over **countable** ads"""),
@@ -28,10 +28,8 @@ def run(name: str, **args) -> dict:
 specs = json.dumps(tools.specs(), ensure_ascii=False)
 print(f"tool specs: {len(specs)} chars, ~{len(specs) // 4} tokens in every request")"""),
     md("## expand_concept"),
-    code("""run("expand_concept", term="Köchin");"""),
-    code("""run("expand_concept", term="Gouvernante");"""),
-    code("""run("expand_concept", term="Böhmisch");"""),
-    code("""run("expand_concept", term="Hauslehrer");"""),
+    code("""run("expand_concept", terms=["Köchin", "Gouvernante"]);"""),
+    code("""run("expand_concept", terms=["Böhmisch", "Hauslehrer"]);"""),
     md("## search_ads"),
     code("""r = run("search_ads", query="Welche Sprachkenntnisse wurden von Gouvernanten verlangt?", k=5)"""),
     code("""run("search_ads", query='Gouvernante französisch', mode="keyword", k=3,
@@ -40,14 +38,14 @@ print(f"tool specs: {len(specs)} chars, ~{len(specs) // 4} tokens in every reque
     code("""run("get_ad", ad_ids=[h["ad_id"] for h in r["results"][:2]]);"""),
     md("## aggregate"),
     code("""run("aggregate", measure="count", group_by="decade", filters={"labels": ["job_offer"]});"""),
-    code("""lemmas = [p["lemma"] for p in tools.call("expand_concept", {"term": "Lehrer"})["positions"][:3]]
+    code("""lemmas = [p["lemma"] for p in tools.call("expand_concept", {"terms": ["Lehrer"]})["results"][0]["positions"][:3]]
 print(lemmas)
 run("aggregate", measure="share", group_by="decade",
     filters={"labels": ["job_offer"], "position_lemmas": lemmas},
     subset={"requirement_tags": ["sprachkenntnisse:Böhmisch"]});"""),
     code("""run("aggregate", measure="count", group_by="requirement_value", dimension="sprachkenntnisse",
     filters={"labels": ["job_offer"]});"""),
-    code("""cooks = [p["lemma"] for p in tools.call("expand_concept", {"term": "Köchin"})["positions"][:1]]
+    code("""cooks = [p["lemma"] for p in tools.call("expand_concept", {"terms": ["Köchin"]})["results"][0]["positions"][:1]]
 print(cooks)
 run("aggregate", measure="pay", group_by="decade", filters={"position_lemmas": cooks});"""),
     code("""run("aggregate", measure="share", group_by="decade", filters={"labels": ["job_search"]},

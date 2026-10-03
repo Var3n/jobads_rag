@@ -28,7 +28,7 @@ def test_tool_rounds_then_answer_with_checked_citations(built):  # noqa: F811
     def handler(payload):
         n = rounds(payload)
         if n == 0:  # two calls in one round
-            return {"tool_calls": [call("expand_concept", {"term": "Lehrer"}, "a"),
+            return {"tool_calls": [call("expand_concept", {"terms": ["Lehrer"]}, "a"),
                                    call("search_ads", {"query": "Krakau", "mode": "keyword"}, "b")]}
         if n == 1:
             assert [m["tool_call_id"] for m in payload["messages"] if m["role"] == "tool"] == ["a", "b"]
@@ -74,7 +74,7 @@ def test_bad_tool_arguments_go_back_to_the_model(built):  # noqa: F811
 def test_api_failure_keeps_the_trace(built):  # noqa: F811
     def handler(payload):
         if rounds(payload) == 0:
-            return {"tool_calls": [call("expand_concept", {"term": "Lehrer"})]}
+            return {"tool_calls": [call("expand_concept", {"terms": ["Lehrer"]})]}
         raise RuntimeError("503")
 
     agent, _ = make_agent(built, handler)
@@ -124,4 +124,4 @@ def test_an_answer_without_tools_is_sent_back_once(built):  # noqa: F811
     a = agent.ask("Wie viele?", log=False)
     assert a.answer == "Gezählt: 5." and len(a.trace) == 1 and a.steps == 3
     assert a.reasoning_chars == len("hmm") + len("jetzt Tools") + len("fertig")
-    assert a.settings["prompt_version"] == "v2"
+    assert a.settings["prompt_version"] == "v3"

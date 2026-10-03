@@ -78,16 +78,22 @@ def test_aggregate_pay_keeps_currencies_apart(tools):
 
 
 def test_expand_concept(tools):
-    r = tools.call("expand_concept", {"term": "Lehrerin"})
+    def expand(term):
+        return tools.call("expand_concept", {"terms": [term]})["results"][0]
+
+    both = tools.call("expand_concept", {"terms": ["Lehrer", "französisch", ""]})["results"]
+    assert [r["term"] for r in both] == ["Lehrer", "französisch", ""] and both[2]["error"] == "leerer Begriff"
+    r = expand("Lehrerin")
     assert r["positions"][0]["lemma"] == "Lehrer" and r["positions"][0]["n_ads"] == 2  # the lemma: Lehrer and Lehrerin
-    r = tools.call("expand_concept", {"term": "Lehrer"})
+    r = expand("Lehrer")
     assert r["positions"][0]["n_ads"] == 2 and r["positions"][0]["modern"][:2] in (["Lehrer", "Lehrerin"],
                                                                                     ["Lehrerin", "Lehrer"])
-    r = tools.call("expand_concept", {"term": "französisch"})
+    r = expand("französisch")
     assert r["requirements"] == [{"tag": "sprachkenntnisse:Französisch", "n_ads": 1}]
-    r = tools.call("expand_concept", {"term": "Haushalt"})
+    r = expand("Haushalt")
     assert r["categories"] == ["Haushalt/Dienstboten"]
-    assert "Kein Eintrag" in tools.call("expand_concept", {"term": "Astronaut"})["hint"]
+    assert "Kein Eintrag" in expand("Astronaut")["hint"]
+    assert "ungültige Argumente" in tools.call("expand_concept", {"terms": []})["error"]
 
 
 def test_search_ads_returns_the_full_text(tools, monkeypatch):

@@ -30,7 +30,7 @@ Die Datenbank:
 
 Vorgehen:
 - Berufe und Anforderungen zuerst mit expand_concept nachschlagen, dann mit den gefundenen Lemmata, Tags und Berufsfeldern filtern. Auch verwandte historische Bezeichnungen nachschlagen (z. B. für Hausangestellte: Köchin, Magd, Stubenmädchen).
-- Unabhängige Aufrufe in derselben Runde stellen (z. B. mehrere expand_concept auf einmal).
+- expand_concept mit allen Begriffen auf einmal aufrufen (terms ist eine Liste); unabhängige Aufrufe in derselben Runde stellen.
 - search_ads im Modus semantic für Themen und Fragen, im Modus keyword für Namen, Orte und feste Begriffe. Im Modus keyword nur die kennzeichnenden Wörter angeben (Rothschild, nicht Haus Rothschild); Varianten mit OR verbinden, andere Wortformen mit wort*. Ergibt eine Suche 0 Treffer, die Suche lockern (weniger Wörter, wort*, OR, weniger Filter, Modus semantic), bevor du schreibst, dass etwas nicht vorkommt.
 - Zahlen, Anteile, Entwicklungen und Löhne nur mit aggregate ermitteln, nie aus Suchtreffern hochrechnen. Ein Anteil braucht eine passende Grundmenge (z. B. alle Stellenangebote desselben Jahrzehnts).
 - Kleine Zahlen prüfen: Die Lemmata sind eng (die meisten Lehrerstellen haben das Lemma Lehrer, die Schulart steht nur im Text). Ergibt ein Filter wenige Anzeigen, mit einem breiteren Filter gegenprüfen (z. B. Lemma Lehrer und keyword Volksschul*), bevor du die Zahl als vollständig darstellst.
@@ -47,7 +47,9 @@ Antwort:
 - Wenn die Daten die Frage nicht oder nur teilweise beantworten, sage das deutlich.
 - Knapp und gegliedert: zuerst die Antwort, dann Belege und Einschränkungen."""
 
-PROMPT_VERSION = "v2"  # v1: pilot 2026-10-02; v2: keyword use, small counts, tag types, kinds of ad, no numbers without tools
+# v1: pilot 2026-10-02; v2: keyword use, small counts, tag types, kinds of ad, no numbers without tools;
+# v3: expand_concept takes a list of terms (one round instead of one per term)
+PROMPT_VERSION = "v3"
 USE_TOOLS = ("Du hast noch kein Tool aufgerufen. Die Antwort muss auf den Daten beruhen: rufe zuerst die passenden "
              "Tools auf.")
 FINAL_NUDGE = ("Du hast die höchste Zahl an Tool-Aufrufen erreicht. Beantworte die Frage jetzt ohne weitere Tools "
