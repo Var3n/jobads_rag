@@ -307,7 +307,7 @@ modes: once `chmod -R g+rwX data/logs && chmod g+s data/logs` by the owner.
 1. **Try the playground on the cluster** (`git pull`, open `notebooks/10_playground.ipynb`, ask a few questions,
    rate them): widgets render (ToggleButtons, Accordion), clippings load, ratings land in `data/logs/ratings.jsonl`.
    Before researchers use it: the owner runs `chmod -R g+rwX data/logs && chmod g+s data/logs` once; researchers need
-   to be in the project's Unix group (read access to the repo and `data/`); open: whose API key they use.
+   to be in the project's Unix group (read access to the repo and `data/`); each uses their own API key in `~/.hisrag.env` (user's decision, 2026-10-03).
 2. **Step 13: exploration by researchers**: the log becomes the first evaluation set.
 3. Steps 14 onward as in the table. For step 15: index build time per newspaper, ANN build time and recall vs exact
    search, and that `build` re-reads all of `ad_clean` through `documents()` per newspaper (fine for a few, slow for 29).
