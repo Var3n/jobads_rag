@@ -1,6 +1,6 @@
 # Project status (proof of concept)
 
-Last updated: 2026-10-03, step 11: pilot 4 reviewed, prompt v5 done, final pilot 5 pending; then step 12. Read this first when picking the project up; `README.md` has setup and commands.
+Last updated: 2026-10-03, step 11 done (prompt v5, five reviewed pilots), step 12 next. Read this first when picking the project up; `README.md` has setup and commands.
 
 ## Goal and constraints
 
@@ -48,7 +48,7 @@ Consequences of the scale (120 requests/min, ~10 tokens/s per request):
 | 8 | Retrieval comparison | done | 299 LLM research questions, pooled LLM judgments; winner qwen3-embedding-8b on enriched text, 1,024 dims (nDCG@10 0.654) |
 | 9 | Index | done | `data/index/` (LanceDB): 49,817 ads, build 6 s, 224 MB; semantic reproduces step 8 (298/299 questions identical) |
 | 10 | Agent tools | done | `hisrag/agent/tools.py`: `search_ads`, `get_ad`, `aggregate`, `expand_concept`; `notebooks/08_agent_tools.ipynb` |
-| 11 | Agent loop | **pilot 5 pending** (v5) | `hisrag/agent/loop.py`: `Agent().ask()`, citation check, log `data/logs/agent.jsonl`; pilot 12 questions × reasoning off/on |
+| 11 | Agent loop | done | prompt v5, reasoning on: ~40 s per answer, no invented IDs in 5 pilots | `hisrag/agent/loop.py`: `Agent().ask()`, citation check, log `data/logs/agent.jsonl`; pilot 12 questions × reasoning off/on |
 | 12 | Playground notebook | open | answer, tool trace, cited clippings (IIIF), rating widget → interaction log |
 | 13 | Exploration by researchers | open | the log becomes the first evaluation set |
 | 14 | Extensions | open | concept graph and `sample_ads` only where the log shows weaknesses |
@@ -273,13 +273,17 @@ ad requires French" without a count.
 *v5.* `aggregate(group_by=requirement_value)` without a dimension returns all tags as `dimension:value` (an overview
 in one call, instead of an error); prompt: for what was demanded/expected/offered/paid, filter `labels: job_offer`,
 also when counting tags; job searches only when the question is about the seekers, and named as such.
+*Pilot 5 (v5), accepted.* Q0 counts languages on job offers (French 4, German 2, English 1, Italian 1); Q11 counts the
+tags of 25 tutor job offers in one call and backs its claims with numbers; Q8 counts familienstand/religion on 65
+educator job offers (ledig 3, religion 0); step limit never hit, 38 s per answer (max 53), 5.6 steps, no invented IDs.
+Remaining slips are labels, left for the interaction log: Q0 calls the 18 governess job offers "with language
+requirements"; Q2 calls lemma Lehrer in Erziehung/Unterricht (256 offers with pay, median 637.5 fl.) "teachers at
+Volksschulen" although it includes other schools.
 
 ## Open items (in order)
 
-1. **Agent pilot 5 (prompt v5)** on the cluster, all 12 questions: Q0 should count on job offers only, Q11 should
-   count the tags; nothing else worse than v4. Then step 11 is done (fine-tuning continues from the interaction log).
-2. **Step 12: playground notebook** (answer, tool trace, cited clippings via IIIF, rating widget → interaction log).
-3. Steps 13 onward as in the table. For step 15: index build time per newspaper, ANN build time and recall vs exact
+1. **Step 12: playground notebook** (answer, tool trace, cited clippings via IIIF, rating widget → interaction log).
+2. Steps 13 onward as in the table. For step 15: index build time per newspaper, ANN build time and recall vs exact
    search, and that `build` re-reads all of `ad_clean` through `documents()` per newspaper (fine for a few, slow for 29).
 
 Smaller known issues: one hallucinated company name from context in step 5; single-occurrence OCR garbles in step 4
