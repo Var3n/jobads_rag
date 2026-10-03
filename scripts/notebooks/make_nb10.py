@@ -23,6 +23,24 @@ Jede Frage wird für sich beantwortet; der Assistent kennt frühere Fragen nicht
 if not load_config().api_key:
     set_api_key()
 print("API-Schlüssel aus", env_file())"""),
+    md("""## Fragen
+
+Neue Frage: den Text in `s.frage("…")` ändern und die Zelle ausführen. *Tool-Aufrufe* und *Zitierte Anzeigen*
+lassen sich unter der Antwort aufklappen."""),
+    code("""from hisrag.agent.playground import Sitzung
+
+s = Sitzung()"""),
+    code("""s.frage("Welche Sprachkenntnisse wurden von Gouvernanten verlangt?")"""),
+    md("""## Bewerten
+
+Urteil: `"richtig"`, `"teilweise"` oder `"falsch"`; `belege`: passen die zitierten Anzeigen zur Antwort (`True`,
+`False`, oder `None` = nicht geprüft); `kommentar`: was fehlt oder falsch ist. Eine spätere Bewertung derselben
+Antwort ersetzt die frühere."""),
+    code("""s.bewerte("richtig", belege=True, kommentar="")"""),
+    md("""## Mit Eingabefeld und Knöpfen (wenn die Oberfläche Widgets unterstützt)
+
+Erscheint statt Feld und Knöpfen nur eine Textzeile `VBox(children=…)`, fehlt der Oberfläche die Widget-Erweiterung;
+dann die Zellen oben verwenden."""),
     code("""from hisrag.agent.playground import Playground
 
 Playground().show()"""),

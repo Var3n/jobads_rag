@@ -293,6 +293,12 @@ characters) and `user` (`JUPYTERHUB_USER`, else the OS user); log records are ap
 record with its trace is longer than an atomic write. `feedback.interactions()` = every logged answer (pilots
 included, `prompt_version` v1 for records before v2) with the latest rating per user: the evaluation set of step 13.
 The notebook is in German (for researchers) and also lists the user's own questions and ratings.
+*No widget support on the cluster's JupyterLab* (first trial: `Playground().show()` printed only the text form
+`VBox(children=…)`: the server lacks the extension `jupyterlab_widgets`; kernel side ipywidgets 8 is installed).
+Therefore `playground.Sitzung`, the same without widgets: `s.frage("…")` shows the answer (cited IDs linked), the basis
+line, and tool calls and cited ads (text, clipping) in HTML `<details>` sections, which need no extension;
+`s.bewerte("richtig" | "teilweise" | "falsch", belege=True | False | None, kommentar="…")` rates the last answer.
+Notebook 10 leads with the cells, the widget version follows for frontends that support it.
 *Shared project folder (user's decision: researchers work in the owner's folder on the compute node, one clone,
 one log folder).* Consequences handled in code: `hisrag/files.append_line` creates log folders group-writable with
 set-group-ID (2775) and log files 664, and locks appends (agent, ratings and usage logs); a usage-log write that fails
@@ -304,8 +310,9 @@ modes: once `chmod -R g+rwX data/logs && chmod g+s data/logs` by the owner.
 
 ## Open items (in order)
 
-1. **Try the playground on the cluster** (`git pull`, open `notebooks/10_playground.ipynb`, ask a few questions,
-   rate them): widgets render (ToggleButtons, Accordion), clippings load, ratings land in `data/logs/ratings.jsonl`.
+1. **Try the playground on the cluster** (`git pull`, open `notebooks/10_playground.ipynb`, ask a few questions with
+   `s.frage`, rate them with `s.bewerte`): sections fold, clippings load, ratings land in `data/logs/ratings.jsonl`.
+   Widgets would need `jupyterlab_widgets` in the JupyterHub server environment (hub admins); not required.
    Before researchers use it: the owner runs `chmod -R g+rwX data/logs && chmod g+s data/logs` once; researchers need
    to be in the project's Unix group (read access to the repo and `data/`); each uses their own API key in `~/.hisrag.env` (user's decision, 2026-10-03).
 2. **Step 13: exploration by researchers**: the log becomes the first evaluation set.

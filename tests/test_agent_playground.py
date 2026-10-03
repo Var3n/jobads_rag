@@ -98,3 +98,33 @@ def test_playground_asks_shows_and_saves_a_rating(built, tmp_path, monkeypatch):
                                                                               "Zahl fehlt")
     pg._new()
     assert pg.current is None and pg.question.value == "" and pg.rating.layout.display == "none"
+
+
+def test_sitzung_without_widgets(built, tmp_path, monkeypatch, capsys):  # noqa: F811
+    from hisrag.agent.playground import Sitzung
+
+    cfg, *_ = built
+    cfg["paths"].update(agent_log=str(tmp_path / "l" / "agent.jsonl"), ratings_log=str(tmp_path / "l" / "ratings.jsonl"))
+    monkeypatch.setenv("JUPYTERHUB_USER", "ben")
+
+    def handler(payload):
+        if sum(m["role"] == "assistant" for m in payload["messages"]) == 0:
+            return {"tool_calls": [{"id": "c", "type": "function",
+                                    "function": {"name": "search_ads",
+                                                 "arguments": json.dumps({"query": "Krakau", "mode": "keyword"})}}]}
+        return "Eine Lehrerstelle in Krakau."
+
+    fake = FakeOpenAI(chat_handler=handler, embedding_dim=32)
+    client = DHClient(cfg, openai_client=fake)
+    s = Sitzung(agent=Agent(cfg, client, Tools(cfg, client=client)))
+    with pytest.raises(ValueError):
+        s.bewerte("richtig")
+    displayed = []
+    monkeypatch.setattr("hisrag.agent.playground.display", lambda obj: displayed.append(obj))
+    s.frage("Lehrer in Krakau?")
+    html_parts = [d.data for d in displayed if type(d).__name__ == "HTML"]
+    assert "<details><summary><b>Tool-Aufrufe (1)</b>" in html_parts[0] and "search_ads" in html_parts[0]
+    s.bewerte("teilweise", belege=None, kommentar="Quelle prüfen")
+    row = F.interactions(cfg).iloc[0]
+    assert (row["user"], row["verdict"], row["citations_fit"], row["comment"]) == ("ben", "teilweise", None,
+                                                                                   "Quelle prüfen")
