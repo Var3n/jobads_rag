@@ -1,6 +1,6 @@
 # Project status (proof of concept)
 
-Last updated: 2026-10-03, step 11: pilots 1–2 reviewed, prompt v3 done, short pilot 3 on the cluster pending. Read this first when picking the project up; `README.md` has setup and commands.
+Last updated: 2026-10-03, step 11 done (prompt v3, three pilots), step 12 next. Read this first when picking the project up; `README.md` has setup and commands.
 
 ## Goal and constraints
 
@@ -48,7 +48,7 @@ Consequences of the scale (120 requests/min, ~10 tokens/s per request):
 | 8 | Retrieval comparison | done | 299 LLM research questions, pooled LLM judgments; winner qwen3-embedding-8b on enriched text, 1,024 dims (nDCG@10 0.654) |
 | 9 | Index | done | `data/index/` (LanceDB): 49,817 ads, build 6 s, 224 MB; semantic reproduces step 8 (298/299 questions identical) |
 | 10 | Agent tools | done | `hisrag/agent/tools.py`: `search_ads`, `get_ad`, `aggregate`, `expand_concept`; `notebooks/08_agent_tools.ipynb` |
-| 11 | Agent loop | **pilot 3 pending** (v3, reasoning only) | `hisrag/agent/loop.py`: `Agent().ask()`, citation check, log `data/logs/agent.jsonl`; pilot 12 questions × reasoning off/on |
+| 11 | Agent loop | done | `hisrag/agent/loop.py`: `Agent().ask()`, citation check, log `data/logs/agent.jsonl`; pilot 12 questions × reasoning off/on |
 | 12 | Playground notebook | open | answer, tool trace, cited clippings (IIIF), rating widget → interaction log |
 | 13 | Exploration by researchers | open | the log becomes the first evaluation set |
 | 14 | Extensions | open | concept graph and `sample_ads` only where the log shows weaknesses |
@@ -251,23 +251,18 @@ is active (≈3,400 characters per answer). **Without reasoning, 3 of 12 replies
 the pilot runs only `agent.thinking` (true) unless `--thinking both`. With reasoning, one remaining waste: one
 `expand_concept` per term (11 in Q8, which hit the limit). Small slips left to the interaction log: "nearly
 indispensable" for French at 4 of 18 ads; a cashier at a butcher counted as office work.
-*v3.* `expand_concept(terms=[…])` looks up to 10 terms in one call (`{"results": [...]}`, one entry per term);
-prompt says so.
+*v3.* `expand_concept(terms=[…])` looks up several terms in one call (`{"results": [...]}`, one entry per term;
+at most 20 since pilot 3, where the model asked for 15 and lost a round on the error); prompt says so.
+*Pilot 3 (v3, reasoning only).* 40 s per answer (v2: 59 s, max 62 s), fewer rounds in 6 of 12 questions, none more,
+lookups of up to 6 terms in one call, no invented IDs, citations as in v2. Q8 (marital status/religion of
+Erzieherinnen) still hits the step limit, cycling keyword variants with narrow filters instead of counting the tags
+`religion`/`familienstand` with aggregate (pilot 2 found `familienstand:ledig` in 3 of 69 ads); its "no explicit
+requirements" is plausible but under-checked. Left for the interaction log (step 13) rather than more prompt rules.
 
 ## Open items (in order)
 
-1. **Agent pilot 3 (prompt v3) on the cluster**, same command, reasoning only (12 answers, a few minutes): check that
-   the lookups now take one round (fewer steps, no step limit in Q8) and nothing got worse; then step 11 is done.
-   Pilot 1 for reference: `nohup python -m hisrag.agent pilot > data/logs/agent_pilot.log 2>&1 &` runs the 12
-   questions of `hisrag/agent/__main__.py` (requirements, shares, pay, a name, benefits, job searches, the interwar gap,
-   gender, a place + language) without and with reasoning, in parallel → `data/logs/agent_pilot.csv` (answer, tools
-   used with arguments, steps, citations, unknown IDs, seconds, tokens; now `agent_pilot_<version>.csv`) and a JSON
-   summary per mode. Review in
-   `notebooks/09_agent_pilot_review.ipynb` (both modes side by side, tool calls, cited ads with clippings). Review: are the
-   answers right and honest about their basis, did the model use the tools sensibly (expand_concept before filters,
-   aggregate for numbers, fitting base sets), invented IDs, time per answer; decide `agent.thinking`; adjust the prompt.
-2. **Step 12: playground notebook** (answer, tool trace, cited clippings via IIIF, rating widget → interaction log).
-3. Steps 11 onward as in the table. For step 15: index build time per newspaper, ANN build time and recall vs exact
+1. **Step 12: playground notebook** (answer, tool trace, cited clippings via IIIF, rating widget → interaction log).
+2. Steps 13 onward as in the table. For step 15: index build time per newspaper, ANN build time and recall vs exact
    search, and that `build` re-reads all of `ad_clean` through `documents()` per newspaper (fine for a few, slow for 29).
 
 Smaller known issues: one hallucinated company name from context in step 5; single-occurrence OCR garbles in step 4

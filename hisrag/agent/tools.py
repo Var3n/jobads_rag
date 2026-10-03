@@ -111,7 +111,7 @@ class AggregateArgs(BaseModel):
 
 
 class ExpandArgs(BaseModel):
-    terms: list[str] = Field(min_length=1, max_length=10,
+    terms: list[str] = Field(min_length=1, max_length=20,
                              description="Berufe, Anforderungen oder Wörter, heutig oder historisch; alle auf einmal "
                                          "nachschlagen (z. B. Köchin, Magd, Stubenmädchen)")
 
