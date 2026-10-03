@@ -208,8 +208,15 @@ call from the model (`tools.call(name, arguments)`, errors come back as `{"error
 
 ```bash
 python -m hisrag.agent ask "Welche Sprachkenntnisse wurden von Gouvernanten verlangt?"   # --thinking for reasoning
-nohup python -m hisrag.agent pilot > data/logs/agent_pilot.log 2>&1 &   # 12 questions, without and with reasoning
+nohup python -m hisrag.agent pilot > data/logs/agent_pilot.log 2>&1 &   # the 12 pilot questions
 ```
+
+### Step 12: playground
+
+`notebooks/10_playground.ipynb` (German, for researchers): ask a question, read the answer with what it rests on, the
+tool calls and the cited ads (text and printed clipping), and rate it. Answers go to `data/logs/agent.jsonl`, ratings
+to `data/logs/ratings.jsonl`; `hisrag.agent.feedback.interactions()` joins both. For several researchers, point
+`paths.agent_log` and `paths.ratings_log` in `config.local.yaml` to one shared, group-writable folder.
 
 Query the result from Python or a notebook:
 

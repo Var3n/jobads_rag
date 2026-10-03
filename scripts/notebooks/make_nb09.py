@@ -55,26 +55,7 @@ All prompt versions in the log, one column per (version, reasoning):"""),
     ["q", "thinking", "steps", "seconds", "n_cited", "unknown_ids", "stopped", "tools_used"]]
 overview.sort_values(["q", "thinking"]).reset_index(drop=True)"""),
     md("## Answers side by side\n\n`compare(i)` shows question *i* (0–11) in both modes with its tool calls."),
-    code("""def tool_lines(trace: list[dict]) -> str:
-    lines = []
-    for t in trace:
-        args = json.dumps(t["args"], ensure_ascii=False)
-        r = t["result"]
-        if "error" in r:
-            got = f"**Fehler:** {r['error'][:200]}"
-        elif t["tool"] == "search_ads":
-            got = f"{len(r['results'])} Treffer" + (f" von {r['total_matches']}" if "total_matches" in r else "")
-        elif t["tool"] == "aggregate":
-            got = f"n_ads = {r['n_ads']}, {r['groups_total']} Gruppen"
-        elif t["tool"] == "expand_concept":
-            got = " · ".join(
-                f"{x['term']}: Lemmata " + ", ".join(f"{p['lemma']} ({p['n_ads']})" for p in x.get("positions", [])[:6])
-                + "; Tags " + ", ".join(f"{q['tag']} ({q['n_ads']})" for q in x.get("requirements", [])[:6])
-                for x in r.get("results", [r]))  # logs before v3: one term per call
-        else:
-            got = f"{len(r.get('ads', []))} Anzeigen"
-        lines.append(f"- Runde {t['step']}: `{t['tool']}` {args}  \\n  → {got}")
-    return "\\n".join(lines)
+    code("""from hisrag.agent.render import trace_markdown as tool_lines
 
 
 def compare(i: int) -> None:

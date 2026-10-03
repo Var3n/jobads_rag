@@ -13,8 +13,9 @@ import json
 import re
 import time
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from uuid import uuid4
 
+from hisrag.agent.feedback import append_jsonl, current_user, now
 from hisrag.agent.tools import Tools
 from hisrag.config import Config, load_config
 
@@ -65,6 +66,8 @@ AD_ID = re.compile(r"\b[a-z]+_\d{8}_\d{3}_region_\d{4}\b")
 class Answer:
     question: str
     answer: str
+    id: str = field(default_factory=lambda: uuid4().hex[:12])  # ratings refer to it
+    user: str = field(default_factory=current_user)
     trace: list[dict] = field(default_factory=list)  # one entry per tool call
     steps: int = 0                                     # model requests
     reasoning_chars: int = 0                           # length of Qwen's reasoning over all requests
@@ -156,11 +159,7 @@ class Agent:
         return out
 
     def log(self, a: Answer) -> None:
-        path = self.cfg.path("agent_log")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        record = {"time": datetime.now(timezone.utc).isoformat(timespec="seconds"), **asdict(a)}
-        with path.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
+        append_jsonl(self.cfg.path("agent_log"), {"time": now(), **asdict(a)})
 
 
 def _parse(args: str | dict):

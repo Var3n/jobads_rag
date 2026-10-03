@@ -12,6 +12,7 @@ paths:
   cache_db: data/cache/llm_cache.sqlite
   usage_log: data/logs/usage.jsonl
   agent_log: data/logs/agent.jsonl      # every agent question with answer and tool trace (step 11)
+  ratings_log: data/logs/ratings.jsonl  # ratings of answers from the playground (step 12)
 
 api:
   base_url: https://api.dhinfra.uni-graz.at/v1
