@@ -52,3 +52,16 @@ def test_env_file_can_live_outside_the_repo(tmp_path, monkeypatch):
 
     assert config.env_file() == secrets
     assert os.environ["DHINFRA_API_KEY"] == "sk-outside"
+
+
+def test_a_researcher_in_the_owners_folder_gets_a_key_file_of_their_own(tmp_path, monkeypatch):
+    monkeypatch.delenv("HISRAG_ENV_FILE", raising=False)
+    monkeypatch.setattr(config, "REPO_ROOT", tmp_path / "repo")
+    monkeypatch.setattr(config.Path, "home", lambda: tmp_path / "home")
+    assert config.env_file() == tmp_path / "repo" / ".env"  # no .env yet: the owner's first setup
+    (tmp_path / "repo").mkdir()
+    (tmp_path / "repo" / ".env").write_text("DHINFRA_API_KEY=owner\n", encoding="utf-8")
+    assert config.env_file() == tmp_path / "repo" / ".env"
+    monkeypatch.setattr(config.os, "access", lambda p, mode: False)  # the owner's file, mode 600
+    assert config.env_file() == tmp_path / "home" / ".hisrag.env"
+    config.load_dotenv(tmp_path / "missing.env")  # unreadable or missing: no error

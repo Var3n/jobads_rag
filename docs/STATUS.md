@@ -293,13 +293,21 @@ characters) and `user` (`JUPYTERHUB_USER`, else the OS user); log records are ap
 record with its trace is longer than an atomic write. `feedback.interactions()` = every logged answer (pilots
 included, `prompt_version` v1 for records before v2) with the latest rating per user: the evaluation set of step 13.
 The notebook is in German (for researchers) and also lists the user's own questions and ratings.
+*Shared project folder (user's decision: researchers work in the owner's folder on the compute node, one clone,
+one log folder).* Consequences handled in code: `hisrag/files.append_line` creates log folders group-writable with
+set-group-ID (2775) and log files 664, and locks appends (agent, ratings and usage logs); a usage-log write that fails
+(someone else's file) prints one warning instead of failing the request; the playground uses no response cache
+(SQLite on NFS written by several users is unreliable, and questions rarely repeat); `env_file()` falls back to
+`~/.hisrag.env` when the repo's `.env` (the owner's key, mode 600) is not readable, so `set_api_key()` stores a
+researcher's own key there (notebook 10 asks for it on first use). Files created before this change keep their
+modes: once `chmod -R g+rwX data/logs && chmod g+s data/logs` by the owner.
 
 ## Open items (in order)
 
 1. **Try the playground on the cluster** (`git pull`, open `notebooks/10_playground.ipynb`, ask a few questions,
    rate them): widgets render (ToggleButtons, Accordion), clippings load, ratings land in `data/logs/ratings.jsonl`.
-   Before researchers use it: decide where the shared logs live (`paths.agent_log`, `paths.ratings_log` in
-   `config.local.yaml`, a group-writable folder) and whether they share one clone of the repo.
+   Before researchers use it: the owner runs `chmod -R g+rwX data/logs && chmod g+s data/logs` once; researchers need
+   to be in the project's Unix group (read access to the repo and `data/`); open: whose API key they use.
 2. **Step 13: exploration by researchers**: the log becomes the first evaluation set.
 3. Steps 14 onward as in the table. For step 15: index build time per newspaper, ANN build time and recall vs exact
    search, and that `build` re-reads all of `ad_clean` through `documents()` per newspaper (fine for a few, slow for 29).

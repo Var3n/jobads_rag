@@ -2,8 +2,8 @@
 
 Every answer is logged by `Agent.ask` to `paths.agent_log` (JSONL, one record per question with its trace and an
 `id`); a rating from the playground is appended to `paths.ratings_log` with that id. `interactions()` joins both
-into one table: the first evaluation set. Several researchers may write at the same time, so records are appended
-under a file lock (on the cluster; Windows has no fcntl and runs single-user tests only).
+into one table: the first evaluation set. Several researchers may write at the same time in one project folder:
+see `hisrag.files` (group-writable files, locked appends).
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from typing import Literal
 import pandas as pd
 
 from hisrag.config import Config, load_config
+from hisrag.files import append_line
 
 Verdict = Literal["richtig", "teilweise", "falsch"]
 VERDICTS = ("richtig", "teilweise", "falsch")
@@ -32,21 +33,8 @@ def now() -> str:
 
 
 def append_jsonl(path: Path, record: dict) -> None:
-    """One line per record; locked, because a record with its trace is longer than an atomic write."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    line = json.dumps(record, ensure_ascii=False, default=str) + "\n"
-    with path.open("a", encoding="utf-8") as f:
-        try:
-            import fcntl
-        except ImportError:  # Windows
-            f.write(line)
-            return
-        fcntl.flock(f, fcntl.LOCK_EX)
-        try:
-            f.write(line)
-            f.flush()
-        finally:
-            fcntl.flock(f, fcntl.LOCK_UN)
+    """One line per record, in a file the other researchers of the project folder can append to as well."""
+    append_line(path, json.dumps(record, ensure_ascii=False, default=str))
 
 
 def read_jsonl(path: Path) -> list[dict]:

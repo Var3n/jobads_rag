@@ -28,6 +28,7 @@ import numpy as np
 from pydantic import BaseModel, ValidationError
 
 from hisrag.config import Config, env_file, load_config
+from hisrag.files import append_line
 
 T = TypeVar("T")
 M = TypeVar("M", bound=BaseModel)
@@ -96,8 +97,7 @@ class UsageTracker:
         self.log_path = log_path
         self.totals: dict[str, dict[str, int]] = defaultdict(lambda: dict.fromkeys(self.FIELDS, 0))
         self._lock = threading.Lock()
-        if log_path is not None:
-            log_path.parent.mkdir(parents=True, exist_ok=True)
+        self._warned = False
 
     def record(self, job: str, endpoint: str, model: str, usage: dict | None, *,
                cache_hit: bool = False, error: str | None = None, latency_s: float = 0.0) -> None:
@@ -118,8 +118,12 @@ class UsageTracker:
             for k in ("prompt_tokens", "completion_tokens", "cached_tokens"):
                 t[k] += entry[k]
             if self.log_path is not None:
-                with open(self.log_path, "a", encoding="utf-8") as f:
-                    f.write(json.dumps(entry) + "\n")
+                try:
+                    append_line(self.log_path, json.dumps(entry))
+                except OSError as exc:  # e.g. another user's log in a shared folder: never fail a request for it
+                    if not self._warned:
+                        print(f"usage log not written ({exc}); token totals are still counted", flush=True)
+                        self._warned = True
 
     def summary(self) -> dict[str, dict[str, int]]:
         with self._lock:

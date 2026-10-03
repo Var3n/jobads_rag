@@ -23,16 +23,24 @@ def _deep_merge(base: dict, override: dict) -> dict:
 
 
 def env_file() -> Path:
-    """The secrets file: $HISRAG_ENV_FILE if set, else .env in the repo root."""
-    return Path(os.environ.get("HISRAG_ENV_FILE", REPO_ROOT / ".env"))
+    """The secrets file: $HISRAG_ENV_FILE if set, else .env in the repo root, unless that belongs to someone else
+    (a researcher working in the project owner's folder cannot read the owner's key): then ~/.hisrag.env."""
+    if "HISRAG_ENV_FILE" in os.environ:
+        return Path(os.environ["HISRAG_ENV_FILE"])
+    repo = REPO_ROOT / ".env"
+    if repo.exists() and not os.access(repo, os.R_OK):
+        return Path.home() / ".hisrag.env"
+    return repo
 
 
 def load_dotenv(path: Path | None = None) -> None:
     """Minimal .env reader: KEY=VALUE lines, never overrides variables that are already non-empty."""
     path = path or env_file()
-    if not path.exists():
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:  # missing or not ours
         return
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in text.splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue

@@ -15,7 +15,7 @@ from IPython.display import HTML, Markdown, display
 from hisrag.agent.feedback import rate
 from hisrag.agent.loop import Agent, Answer
 from hisrag.agent.render import basis_line, link_citations, trace_markdown
-from hisrag.config import Config
+from hisrag.config import Config, load_config
 
 VERDICT_OPTIONS = [("richtig", "richtig"), ("teilweise richtig", "teilweise"), ("falsch", "falsch")]
 FIT_OPTIONS = [("passen", True), ("passen nicht", False), ("nicht geprüft", None)]
@@ -23,7 +23,14 @@ FIT_OPTIONS = [("passen", True), ("passen nicht", False), ("nicht geprüft", Non
 
 class Playground:
     def __init__(self, cfg: Config | None = None, agent: Agent | None = None):
-        self.agent = agent or Agent(cfg)
+        if agent is None:
+            # no response cache: questions are rarely repeated, and an SQLite file on the shared NFS folder,
+            # written by several researchers at once, is unreliable
+            from hisrag.llm import DHClient
+
+            cfg = cfg or load_config()
+            agent = Agent(cfg, DHClient(cfg, use_cache=False))
+        self.agent = agent
         self.cfg = self.agent.cfg
         self.current: Answer | None = None
 

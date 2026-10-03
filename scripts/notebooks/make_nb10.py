@@ -16,6 +16,13 @@ Stellen Sie eine Forschungsfrage in heutigem Deutsch. Der Assistent sucht in den
   sind die Grundlage, um den Assistenten zu prüfen und zu verbessern.
 
 Jede Frage wird für sich beantwortet; der Assistent kennt frühere Fragen nicht."""),
+    md("Beim ersten Mal: den eigenen API-Schlüssel für DHinfra eingeben (er wird in `~/.hisrag.env` gespeichert, "
+       "nur für Sie lesbar)."),
+    code("""from hisrag.config import env_file, load_config, set_api_key
+
+if not load_config().api_key:
+    set_api_key()
+print("API-Schlüssel aus", env_file())"""),
     code("""from hisrag.agent.playground import Playground
 
 Playground().show()"""),
