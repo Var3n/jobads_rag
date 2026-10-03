@@ -27,7 +27,6 @@ def test_call_reports_errors_to_the_model(tools):
     assert "unbekanntes Tool" in tools.call("delete_all", "{}")["error"]
     assert "ungültige Argumente" in tools.call("search_ads", '{"query": "x", "k": 500}')["error"]
     assert "ungültige Argumente" in tools.call("search_ads", "{not json")["error"]
-    assert "dimension" in tools.call("aggregate", {"group_by": "requirement_value"})["error"]
     assert "must occur" in tools.call("search_ads", {"query": "-Krakau", "mode": "keyword"})["error"]
 
 
@@ -108,3 +107,8 @@ def test_keyword_without_hits_says_how_to_loosen(tools):
     r = tools.call("search_ads", {"query": "Haus Rothschild", "mode": "keyword"})
     assert r["total_matches"] == 0 and "weniger" in r["hint"]
     assert "hint" not in tools.call("search_ads", {"query": "Krakau OR Rothschild", "mode": "keyword"})
+
+
+def test_aggregate_all_requirement_tags(tools):
+    r = tools.call("aggregate", {"group_by": "requirement_value"})
+    assert r["rows"] == [{"group": "sprachkenntnisse:Französisch", "n": 1}]

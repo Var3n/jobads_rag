@@ -52,7 +52,7 @@ run("aggregate", measure="pay", group_by="decade", filters={"position_lemmas": c
     subset={"keyword": "Gouvernante*"});"""),
     code("""run("aggregate", measure="count", group_by="benefit", filters={"labels": ["job_offer"], "year_to": 1879});"""),
     md("## Errors come back to the model"),
-    code("""run("aggregate", group_by="requirement_value");
+    code("""run("aggregate", measure="share", group_by="decade");
 run("search_ads", query="x", k=100);"""),
 ]
 nb = nbf.v4.new_notebook(cells=cells, metadata={"kernelspec": {"name": "hisrag", "display_name": "hisrag", "language": "python"}})

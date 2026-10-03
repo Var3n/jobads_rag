@@ -1,6 +1,6 @@
 # Project status (proof of concept)
 
-Last updated: 2026-10-03, step 11: prompt v4 done, pilot 4 on the cluster pending; then step 12. Read this first when picking the project up; `README.md` has setup and commands.
+Last updated: 2026-10-03, step 11: pilot 4 reviewed, prompt v5 done, final pilot 5 pending; then step 12. Read this first when picking the project up; `README.md` has setup and commands.
 
 ## Goal and constraints
 
@@ -48,7 +48,7 @@ Consequences of the scale (120 requests/min, ~10 tokens/s per request):
 | 8 | Retrieval comparison | done | 299 LLM research questions, pooled LLM judgments; winner qwen3-embedding-8b on enriched text, 1,024 dims (nDCG@10 0.654) |
 | 9 | Index | done | `data/index/` (LanceDB): 49,817 ads, build 6 s, 224 MB; semantic reproduces step 8 (298/299 questions identical) |
 | 10 | Agent tools | done | `hisrag/agent/tools.py`: `search_ads`, `get_ad`, `aggregate`, `expand_concept`; `notebooks/08_agent_tools.ipynb` |
-| 11 | Agent loop | **pilot 4 pending** (v4) | `hisrag/agent/loop.py`: `Agent().ask()`, citation check, log `data/logs/agent.jsonl`; pilot 12 questions × reasoning off/on |
+| 11 | Agent loop | **pilot 5 pending** (v5) | `hisrag/agent/loop.py`: `Agent().ask()`, citation check, log `data/logs/agent.jsonl`; pilot 12 questions × reasoning off/on |
 | 12 | Playground notebook | open | answer, tool trace, cited clippings (IIIF), rating widget → interaction log |
 | 13 | Exploration by researchers | open | the log becomes the first evaluation set |
 | 14 | Extensions | open | concept graph and `sample_ads` only where the log shows weaknesses |
@@ -263,11 +263,21 @@ requirements" is plausible but under-checked.
 tags and concluded absence from 0 keyword hits. Prompt rule: for requirement questions, first count the tags with
 aggregate (`group_by requirement_value` + `dimension`, benefits with `group_by benefit`) on the question's base set,
 then examples; never conclude absence from keyword hits without the tag count. `expand_concept`'s hint says the same.
+*Pilot 4 (v4).* Best so far: step limit never hit (v3: 1), 5.5 steps, 40 s, no invented IDs. Q8 counted
+`familienstand`/`religion` over 136 educator job offers (ledig 3, religion none) before reading examples; Q6 counted
+six tag dimensions over 365 job searches (right there: the question is about the seekers); Q5 started from the benefit
+count. Two slips: Q0 counted language tags without the job-offer filter (French 52 of 101 incl. governesses' own job
+searches; earlier pilots on job offers: 4 of 18) and stated "93 of 101 name a language", which no tool returned;
+Q11 called `aggregate` by requirement value without a dimension, got an error, did not retry and wrote "almost every
+ad requires French" without a count.
+*v5.* `aggregate(group_by=requirement_value)` without a dimension returns all tags as `dimension:value` (an overview
+in one call, instead of an error); prompt: for what was demanded/expected/offered/paid, filter `labels: job_offer`,
+also when counting tags; job searches only when the question is about the seekers, and named as such.
 
 ## Open items (in order)
 
-1. **Agent pilot 4 (prompt v4)** on the cluster, all 12 questions: Q8 should count `religion`/`familienstand` tags,
-   Q0 and Q5 their tags first; nothing else worse than v3. Then step 11 is done.
+1. **Agent pilot 5 (prompt v5)** on the cluster, all 12 questions: Q0 should count on job offers only, Q11 should
+   count the tags; nothing else worse than v4. Then step 11 is done (fine-tuning continues from the interaction log).
 2. **Step 12: playground notebook** (answer, tool trace, cited clippings via IIIF, rating widget → interaction log).
 3. Steps 13 onward as in the table. For step 15: index build time per newspaper, ANN build time and recall vs exact
    search, and that `build` re-reads all of `ad_clean` through `documents()` per newspaper (fine for a few, slow for 29).

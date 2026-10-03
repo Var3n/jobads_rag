@@ -36,7 +36,7 @@ Vorgehen:
 - Kleine Zahlen prüfen: Die Lemmata sind eng (die meisten Lehrerstellen haben das Lemma Lehrer, die Schulart steht nur im Text). Ergibt ein Filter wenige Anzeigen, mit einem breiteren Filter gegenprüfen (z. B. Lemma Lehrer und keyword Volksschul*), bevor du die Zahl als vollständig darstellst.
 - Fragen nach Anforderungen (Sprachen, Familienstand, Religion, Alter, Bildung, Naturalleistungen …): zuerst die Anforderungs-Tags zählen, mit aggregate (group_by requirement_value mit der passenden dimension, z. B. familienstand oder religion; Naturalleistungen mit group_by benefit), auf der Grundmenge der Frage (Beruf, Art der Anzeige, Zeitraum). Die Tags fassen verschiedene Formulierungen zusammen ("unverehelicht", "ledige" → familienstand:ledig); eine keyword-Suche findet nur das genaue Wort und verfehlt die anderen. Erst danach Beispiele mit search_ads (Filter requirement_tags) und get_ad. Nie aus 0 keyword-Treffern schließen, dass eine Anforderung fehlt, ohne die Tags gezählt zu haben.
 - Anforderungs-Tags genau lesen: unterrichtssprache ist die Sprache einer Schule, keine Anforderung an die Person; sprachkenntnisse sind Kenntnisse der Person. Getrennt berichten, nicht zusammenzählen.
-- Die Art der Anzeige beachten: Stellengesuche zeigen, wie sich Suchende beschreiben, nicht, was Arbeitgeber erwarten.
+- Die Art der Anzeige beachten: Fragt die Frage, was verlangt, erwartet, angeboten oder bezahlt wurde, auf Stellenangebote filtern (labels: job_offer), auch beim Zählen der Tags. Stellengesuche zeigen, wie sich Suchende beschreiben, nicht, was Arbeitgeber erwarten; sie nur verwenden, wenn die Frage nach den Suchenden fragt, und dann so benennen.
 - get_ad für die Einzelheiten von Anzeigen, die du zitierst oder genauer prüfst.
 - Zeiträume der Frage als year_from/year_to filtern.
 
@@ -50,8 +50,9 @@ Antwort:
 
 # v1: pilot 2026-10-02; v2: keyword use, small counts, tag types, kinds of ad, no numbers without tools;
 # v3: expand_concept takes a list of terms (one round instead of one per term);
-# v4: requirement questions start by counting the tags with aggregate, not with keyword variants
-PROMPT_VERSION = "v4"
+# v4: requirement questions start by counting the tags with aggregate, not with keyword variants;
+# v5: job offers only for what was demanded/offered; aggregate over all tags without a dimension
+PROMPT_VERSION = "v5"
 USE_TOOLS = ("Du hast noch kein Tool aufgerufen. Die Antwort muss auf den Daten beruhen: rufe zuerst die passenden "
              "Tools auf.")
 FINAL_NUDGE = ("Du hast die höchste Zahl an Tool-Aufrufen erreicht. Beantworte die Frage jetzt ohne weitere Tools "

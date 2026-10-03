@@ -104,7 +104,8 @@ class AggregateArgs(BaseModel):
                       "benefit"] = Field(
         "decade", description="Gruppierung. Bei Listenfeldern (Berufe, Anforderungen, Leistungen) zählt eine Anzeige "
                               "in jeder ihrer Gruppen")
-    dimension: str | None = Field(None, description="nur bei group_by=requirement_value: die Anforderungsdimension, "
+    dimension: str | None = Field(None, description="nur bei group_by=requirement_value: die Anforderungsdimension "
+                                                    "(ohne dimension: alle Anforderungen als dimension:wert), "
                                                     "z. B. sprachkenntnisse")
     filters: AggFilterArgs = Field(default_factory=AggFilterArgs, description="die Grundmenge der Anzeigen")
     subset: AggFilterArgs | None = Field(None, description="nur bei share: die zusätzliche Bedingung")
@@ -283,11 +284,10 @@ class Tools:
         return " AND ".join(f"({p})" for p in parts)
 
     def aggregate(self, a: AggregateArgs) -> dict:
-        if a.group_by == "requirement_value" and not a.dimension:
-            raise ValueError("group_by=requirement_value braucht 'dimension'")
         if a.measure == "share" and a.subset is None:
             raise ValueError("measure=share braucht 'subset'")
-        group = self.GROUPS[a.group_by]
+        all_tags = a.group_by == "requirement_value" and not a.dimension  # every tag as dimension:value
+        group = "unnest(requirement_tags)" if all_tags else self.GROUPS[a.group_by]
         where = self._where(a.filters, "kw_base") + " AND countable"
         params = {"dim": a.dimension} if "$dim" in group else {}
         sub = f"SELECT *, {group} AS g FROM base WHERE {where}"
@@ -312,7 +312,7 @@ class Tools:
                            "Standards (CM, ö.W.) und Zeiträume nie vermischen.")
         order = "g" if a.group_by in self.ORDERED else ("n DESC, g" if a.measure != "share" else "n_base DESC, g")
         rows = self.con.execute(f"SELECT * FROM ({sql}) ORDER BY {order}", params).df()
-        if a.group_by == "requirement_value":
+        if a.group_by == "requirement_value" and not all_tags:
             rows["g"] = rows["g"].str.split(":", n=1).str[1]
         out["groups_total"] = len(rows)
         if len(rows) > MAX_GROUPS and a.group_by not in self.ORDERED:  # a time series is never cut
