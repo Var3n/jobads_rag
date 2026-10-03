@@ -377,7 +377,8 @@ class Tools:
                                  zip(reqs["dimension"], reqs["value"], reqs["n"])],
                 "categories": cats,
                 "hint": "Filter: position_lemmas = Lemma, requirement_tags = Tag, position_categories = Berufsfeld; "
-                        "für search_ads im Modus keyword die Schreibungen mit * verwenden."
+                        "für search_ads im Modus keyword die Schreibungen mit * verwenden. Anforderungen zählen: "
+                        "aggregate mit group_by requirement_value und der dimension des Tags."
                         if (lemmas or reqs.size or cats) else
                         f"Kein Eintrag für {term!r}; mit einem anderen oder allgemeineren Wort versuchen oder "
                         "search_ads im Modus semantic verwenden."}

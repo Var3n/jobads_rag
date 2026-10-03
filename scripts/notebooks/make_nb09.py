@@ -18,7 +18,7 @@ from IPython.display import Image, Markdown, display
 from hisrag.config import load_config
 from hisrag.data import query
 
-VERSION = "v3"  # prompt version of the pilot to review (v1 = first pilot, its CSV is agent_pilot.csv)
+VERSION = "v4"  # prompt version of the pilot to review (v1 = first pilot, its CSV is agent_pilot.csv)
 
 cfg = load_config()
 LOGS = cfg.path("agent_log").parent

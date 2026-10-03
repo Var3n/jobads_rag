@@ -34,6 +34,7 @@ Vorgehen:
 - search_ads im Modus semantic für Themen und Fragen, im Modus keyword für Namen, Orte und feste Begriffe. Im Modus keyword nur die kennzeichnenden Wörter angeben (Rothschild, nicht Haus Rothschild); Varianten mit OR verbinden, andere Wortformen mit wort*. Ergibt eine Suche 0 Treffer, die Suche lockern (weniger Wörter, wort*, OR, weniger Filter, Modus semantic), bevor du schreibst, dass etwas nicht vorkommt.
 - Zahlen, Anteile, Entwicklungen und Löhne nur mit aggregate ermitteln, nie aus Suchtreffern hochrechnen. Ein Anteil braucht eine passende Grundmenge (z. B. alle Stellenangebote desselben Jahrzehnts).
 - Kleine Zahlen prüfen: Die Lemmata sind eng (die meisten Lehrerstellen haben das Lemma Lehrer, die Schulart steht nur im Text). Ergibt ein Filter wenige Anzeigen, mit einem breiteren Filter gegenprüfen (z. B. Lemma Lehrer und keyword Volksschul*), bevor du die Zahl als vollständig darstellst.
+- Fragen nach Anforderungen (Sprachen, Familienstand, Religion, Alter, Bildung, Naturalleistungen …): zuerst die Anforderungs-Tags zählen, mit aggregate (group_by requirement_value mit der passenden dimension, z. B. familienstand oder religion; Naturalleistungen mit group_by benefit), auf der Grundmenge der Frage (Beruf, Art der Anzeige, Zeitraum). Die Tags fassen verschiedene Formulierungen zusammen ("unverehelicht", "ledige" → familienstand:ledig); eine keyword-Suche findet nur das genaue Wort und verfehlt die anderen. Erst danach Beispiele mit search_ads (Filter requirement_tags) und get_ad. Nie aus 0 keyword-Treffern schließen, dass eine Anforderung fehlt, ohne die Tags gezählt zu haben.
 - Anforderungs-Tags genau lesen: unterrichtssprache ist die Sprache einer Schule, keine Anforderung an die Person; sprachkenntnisse sind Kenntnisse der Person. Getrennt berichten, nicht zusammenzählen.
 - Die Art der Anzeige beachten: Stellengesuche zeigen, wie sich Suchende beschreiben, nicht, was Arbeitgeber erwarten.
 - get_ad für die Einzelheiten von Anzeigen, die du zitierst oder genauer prüfst.
@@ -48,8 +49,9 @@ Antwort:
 - Knapp und gegliedert: zuerst die Antwort, dann Belege und Einschränkungen."""
 
 # v1: pilot 2026-10-02; v2: keyword use, small counts, tag types, kinds of ad, no numbers without tools;
-# v3: expand_concept takes a list of terms (one round instead of one per term)
-PROMPT_VERSION = "v3"
+# v3: expand_concept takes a list of terms (one round instead of one per term);
+# v4: requirement questions start by counting the tags with aggregate, not with keyword variants
+PROMPT_VERSION = "v4"
 USE_TOOLS = ("Du hast noch kein Tool aufgerufen. Die Antwort muss auf den Daten beruhen: rufe zuerst die passenden "
              "Tools auf.")
 FINAL_NUDGE = ("Du hast die höchste Zahl an Tool-Aufrufen erreicht. Beantworte die Frage jetzt ohne weitere Tools "

@@ -124,4 +124,4 @@ def test_an_answer_without_tools_is_sent_back_once(built):  # noqa: F811
     a = agent.ask("Wie viele?", log=False)
     assert a.answer == "Gezählt: 5." and len(a.trace) == 1 and a.steps == 3
     assert a.reasoning_chars == len("hmm") + len("jetzt Tools") + len("fertig")
-    assert a.settings["prompt_version"] == "v3"
+    assert a.settings["prompt_version"] == "v4"

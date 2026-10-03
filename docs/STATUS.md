@@ -1,6 +1,6 @@
 # Project status (proof of concept)
 
-Last updated: 2026-10-03, step 11 done (prompt v3, three pilots), step 12 next. Read this first when picking the project up; `README.md` has setup and commands.
+Last updated: 2026-10-03, step 11: prompt v4 done, pilot 4 on the cluster pending; then step 12. Read this first when picking the project up; `README.md` has setup and commands.
 
 ## Goal and constraints
 
@@ -48,7 +48,7 @@ Consequences of the scale (120 requests/min, ~10 tokens/s per request):
 | 8 | Retrieval comparison | done | 299 LLM research questions, pooled LLM judgments; winner qwen3-embedding-8b on enriched text, 1,024 dims (nDCG@10 0.654) |
 | 9 | Index | done | `data/index/` (LanceDB): 49,817 ads, build 6 s, 224 MB; semantic reproduces step 8 (298/299 questions identical) |
 | 10 | Agent tools | done | `hisrag/agent/tools.py`: `search_ads`, `get_ad`, `aggregate`, `expand_concept`; `notebooks/08_agent_tools.ipynb` |
-| 11 | Agent loop | done | `hisrag/agent/loop.py`: `Agent().ask()`, citation check, log `data/logs/agent.jsonl`; pilot 12 questions × reasoning off/on |
+| 11 | Agent loop | **pilot 4 pending** (v4) | `hisrag/agent/loop.py`: `Agent().ask()`, citation check, log `data/logs/agent.jsonl`; pilot 12 questions × reasoning off/on |
 | 12 | Playground notebook | open | answer, tool trace, cited clippings (IIIF), rating widget → interaction log |
 | 13 | Exploration by researchers | open | the log becomes the first evaluation set |
 | 14 | Extensions | open | concept graph and `sample_ads` only where the log shows weaknesses |
@@ -257,12 +257,19 @@ at most 20 since pilot 3, where the model asked for 15 and lost a round on the e
 lookups of up to 6 terms in one call, no invented IDs, citations as in v2. Q8 (marital status/religion of
 Erzieherinnen) still hits the step limit, cycling keyword variants with narrow filters instead of counting the tags
 `religion`/`familienstand` with aggregate (pilot 2 found `familienstand:ledig` in 3 of 69 ads); its "no explicit
-requirements" is plausible but under-checked. Left for the interaction log (step 13) rather than more prompt rules.
+requirements" is plausible but under-checked.
+*v4 (with the user).* Q8 showed a systematic gap: the requirement tags of step 5 normalize differently worded phrases
+("unverehelicht", "ledige" → `familienstand:ledig`), which a keyword search for one word misses; v3 never counted the
+tags and concluded absence from 0 keyword hits. Prompt rule: for requirement questions, first count the tags with
+aggregate (`group_by requirement_value` + `dimension`, benefits with `group_by benefit`) on the question's base set,
+then examples; never conclude absence from keyword hits without the tag count. `expand_concept`'s hint says the same.
 
 ## Open items (in order)
 
-1. **Step 12: playground notebook** (answer, tool trace, cited clippings via IIIF, rating widget → interaction log).
-2. Steps 13 onward as in the table. For step 15: index build time per newspaper, ANN build time and recall vs exact
+1. **Agent pilot 4 (prompt v4)** on the cluster, all 12 questions: Q8 should count `religion`/`familienstand` tags,
+   Q0 and Q5 their tags first; nothing else worse than v3. Then step 11 is done.
+2. **Step 12: playground notebook** (answer, tool trace, cited clippings via IIIF, rating widget → interaction log).
+3. Steps 13 onward as in the table. For step 15: index build time per newspaper, ANN build time and recall vs exact
    search, and that `build` re-reads all of `ad_clean` through `documents()` per newspaper (fine for a few, slow for 29).
 
 Smaller known issues: one hallucinated company name from context in step 5; single-occurrence OCR garbles in step 4
